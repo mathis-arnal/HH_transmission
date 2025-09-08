@@ -1,0 +1,251 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+## Data exploring
+
+Let's see how many Households don't have any sequences
+
+```{r}
+library(readxl)
+library(tidyverse)
+flook_trans <- read_excel("D:/VERDI/FINAL_DATA/metadata/res/VERDI_dataset_250522_endformatted (1).xlsx") %>% 
+  select(pid,hhid,index, result_day1, result_infected, sampleid, timetoinf, ngene_infected, sgene_infected)
+
+index_no_seq <- flook_trans %>% 
+  filter(index == 1) %>% 
+  filter(is.na(sampleid)) %>% 
+  pull(pid)
+
+index_no_seq_df <- read_excel("D:/VERDI/FINAL_DATA/metadata/res/VERDI_dataset_250522_endformatted (1).xlsx") %>% 
+  filter ( pid %in% index_no_seq)
+
+library(dplyr)
+
+na_count <- index_no_seq_df %>%
+  summarise(across(everything(), ~ sum(is.na(.)))) %>%
+  pivot_longer(everything(), names_to = "Column", values_to = "NA_count") %>%
+  arrange(NA_count)
+
+```
+
+Let's compare with this data
+
+```{r}
+all_seq_pid <- read.csv("../datasets/verdi_seq_df.csv") %>% 
+  pull(pid)
+setdiff(index_no_seq, all_seq_pid)
+```
+
+Effectively, for this household we don't have the sequences because the CT value was mainly above 30.
+
+```{r}
+hhid_no_seq <- read_excel("D:/VERDI/FINAL_DATA/metadata/res/VERDI_dataset_250522_endformatted (1).xlsx") %>% 
+  filter ( pid %in% index_no_seq) %>%
+  pull(unique(hhid))
+
+hhid_no_seq_df <- read_excel("D:/VERDI/FINAL_DATA/metadata/res/VERDI_dataset_250522_endformatted (1).xlsx") %>% 
+  filter ( hhid %in% hhid_no_seq) %>% 
+  select(pid,hhid,sampleid)
+```
+
+There is only one sequence (ht04602_221201_inf) with a HH transmission inside the HH with no index squences. We drop this one household.
+
+Let's see if
+
+```{r}
+
+problematic_hhid <- flook_trans %>%
+  filter(is.na(sampleid) & !is.na(result_infected)) %>% 
+  pull(unique(hhid))
+
+problematic_hhid <- flook_trans %>% 
+  filter(hhid %in% problematic_hhid)
+```
+
+The SGENE and NGENE CT values were \>30, so we couldn't sequence the sample.
+
+```{r}
+all_hhid <- read.csv("../datasets/verdi_seq_df.csv") %>% 
+  pull(hhid) %>% 
+  unique()
+```
+
+We have 84 Households in the phylogenetic analysis.
+
+# Intra household transmission
+
+```{r}
+library(readr)
+hhtrans_pid <- read.csv("../analysis/IQtree_LSD/verdiGISAID/treetime/threshold_hhtrans/d35_hhtrans_pid.csv") %>%
+  mutate(pid = toupper(x)) %>% 
+  pull(pid)
+
+
+  
+all_seq <- read.csv("../datasets/verdi_seq_df.csv") %>% 
+  mutate(hhtrans = pid %in% hhtrans_pid)
+
+
+contact_infected <- all_seq %>% 
+  filter(used_in_phylogeny == "YES") %>% 
+  filter(index == "0")
+
+HHID_contact_infected_all <- contact_infected %>% 
+  distinct(hhid)
+
+
+
+HHID_contact_infected_hhtrans <- contact_infected %>% 
+  filter(hhtrans) %>% 
+  distinct(hhid)
+
+HHID_contact_infected_hhtrans_only <- contact_infected %>%
+  group_by(hhid) %>%
+  filter(all(hhtrans)) %>%
+  distinct(hhid)
+
+HHID_contact_infected_community <- contact_infected %>%
+  filter(!hhtrans) %>%
+  distinct(hhid)
+
+HHID_contact_infected_community_only <- contact_infected %>%
+  group_by(hhid) %>%
+  filter(all(!hhtrans)) %>%
+  distinct(hhid)
+
+HHID_contact_infected_BOTH <- contact_infected %>% 
+  group_by(hhid) %>% 
+  filter(any(hhtrans == TRUE) & any(hhtrans == FALSE)) %>%
+  ungroup() %>% 
+  distinct(hhid)
+
+```
+
+There is 30 Household that got secondary infections,
+
+There is 23 Households that got at least one case of intra-household transmission ( 20 got strictly only HH transmission).
+
+There is 10 Households that got at least one case of community transmission ( 7 got strictly only HH transmission ).
+
+There is 3 Households that got both types on transmission.
+
+```{r}
+contact_infected <- all_seq %>% 
+  filter(used_in_phylogeny == "YES") %>% 
+  filter(index == "0")
+
+gisaid_seq <- read.FASTA("../reads/nothern_seq_gisaid.fa")
+
+index_num <- all_seq %>% 
+  filter(used_in_phylogeny == "YES") %>% 
+  filter(index == "1")
+```
+
+There is 40 secondary infections.
+
+There is 81 Index cases.
+
+There is exactly 1850 GISAID SEQUENCES.
+
+# Patumrat Data
+
+```{r}
+patumrat_data <- read_csv("../datasets/dataset_freezed28Jul25(1).csv")
+```
+
+ht046 and ht088 are removed from the sensitivity analysis due to
+
+```{r}
+infected_pat <- patumrat_data %>% 
+  filter(infection =="1") %>% 
+  filter(index == "0") %>% 
+  pull(pid)
+
+contact_infected <- contact_infected %>% 
+  pull(pid)
+
+not_phylo_seq <- setdiff(infected_pat, contact_infected)
+
+
+flook_not_phylo_seq <- flook_trans %>% 
+  subset(pid %in% not_phylo_seq)
+
+
+```
+
+# Household size characteristics
+
+```{r}
+patumrat_data <- read_csv("../datasets/dataset_freezed28Jul25(1).csv")
+colnames(patumrat_data)
+
+all_var <- c("pid", 'hhid', 'index_child', 'household_size','bedroom_num', 'toilet_num', 'separate_bed', 'ven_fan', 'ven_window', 'ven_aircon', 'total_inhouse', 'household_size_cat', 'sepbed', 'septoilet', 'mask_ind', "index_wear_mask", "member_wear_mask")
+
+HH_df <- patumrat_data %>% 
+  select(all_of(all_var))
+
+HH_var <- c('index_child','household_size','bedroom_num', 'toilet_num', 'separate_bed', 'ven_fan', 'ven_window', 'ven_aircon', 'total_inhouse', 'household_size_cat', 'sepbed', 'septoilet', 'mask_ind', "index_wear_mask", "member_wear_mask")
+
+
+# Concaténer toutes les variables HH, sauf pid, hhid et index
+final_df <- HH_df %>%
+  group_by(hhid) %>%
+  summarise(across(-c(pid), ~paste(unique(na.omit(.)), collapse = ", "), .names = "{col}")) %>%
+  ungroup()
+
+```
+
+```{r}
+library(tableone)
+
+final_df <- final_df %>% 
+  mutate(index_child = as.factor(index_child),
+         household_size = as.numeric(household_size),
+         bedroom_num = as.numeric(bedroom_num),
+         toilet_num = as.numeric(toilet_num),
+         bedroom_num_cat = ifelse(bedroom_num >1, ">1", "1"),
+         toilet_num_cat = ifelse(toilet_num >1, ">1", "1"),
+         household_size_cat = ifelse(household_size >4, ">4", "<=4"))
+
+# Define your variables
+study_var <- c('household_size','bedroom_num', 'toilet_num', 'separate_bed',"sepbed", 'ven_fan', 'ven_window', 'ven_aircon', 'total_inhouse', 'household_size_cat', "index_wear_mask", "member_wear_mask",
+               "bedroom_num_cat", "toilet_num_cat")
+
+
+num_var <- c("household_size", "bedroom_num","toilet_num")
+# Specify which are categorical
+cat_vars <- c("separate_bed","sepbed","ven_fan","ven_window","household_size_cat",
+              "ven_aircon","index_wear_mask","member_wear_mask", "bedroom_num_cat", "toilet_num_cat")
+
+# Create a TableOne stratified by index_age_group (<18, ≥18)
+tab <- CreateTableOne(vars = study_var, strata = "index_child",
+                      data = final_df, factorVars = cat_vars)
+
+# Print table with n (%) for categorical, median (IQR) for numeric
+print(tab, 
+      showAllLevels = TRUE,
+      quote = FALSE, 
+      nospaces = TRUE,
+      nonnormal = num_var)
+```
+
+```{r}
+library(gtsummary)
+
+tbl <- HH_df %>%
+  mutate(index_age_group = ifelse(index_age < 18, "<18","≥18")) %>%
+  tbl_summary(
+    by = index_age_group,
+    statistic = list(
+      all_continuous() ~ "{median} ({p25}-{p75})",
+      all_categorical() ~ "{n} ({p}%)"
+    )
+  ) %>%
+  add_overall()   # Adds the Total column
+
+tbl
+
+```

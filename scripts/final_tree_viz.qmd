@@ -1,0 +1,615 @@
+---
+title: "Tree vizualisation"
+format: html
+editor: visual
+---
+
+## Import and create the annotation data
+
+```{r}
+library(ggplot2)
+library(ggtree)
+library(ape)
+library(dplyr)
+library(ggtreeExtra)
+library(ggnewscale)
+
+#BiocManager::install("ggtreeExtra")
+#install.packages("ggplot2")
+#BiocManager::install("ggtree")  # ggtree est sur Bioconductor
+
+tree_path <- "../analysis/IQtree_LSD/verdiGISAID/correct_label_treetime/timetree.nexus"
+tree <- read.nexus(tree_path)
+# Add he pango lineages
+pango_lineages <- read.csv("../analysis/IQtree_LSD/verdiGISAID/lineage_report.csv")
+pango_lineages <- pango_lineages %>% 
+  select(taxon, scorpio_call) %>% 
+  rename(lineage = scorpio_call)
+
+# Relabel the mislabeled sample
+pango_lineages$taxon[pango_lineages$taxon =="ht08302_231212_inf"] <- "ht08302_231112_inf"
+
+hh_trans <- read.csv("../analysis/IQtree_LSD/verdiGISAID/treetime/threshold_hhtrans/d35_hhtransmission.csv")
+
+hh_trans <- hh_trans %>% 
+  mutate(pid = toupper(sampleid)) %>% 
+  pull(pid)
+
+
+
+verdi_df <- read.csv("../datasets/verdi_seq_df.csv")
+verdi_df <- verdi_df %>% 
+  mutate(hhtrans_mem = pid %in% hh_trans) %>% 
+  filter(used_in_phylogeny == "YES")
+
+# See at house level
+hhid_trans <- verdi_df %>% 
+  filter(hhtrans_mem) %>% 
+  pull(unique(hhid))
+
+verdi_df <- verdi_df %>% 
+  mutate(hhtrans_house = hhid %in% hhid_trans)
+
+# Create the tip data 
+
+tip_data <- data.frame(
+  tip_label = tree$tip.label
+)
+
+tip_data <- dplyr::left_join(tip_data, verdi_df, by = c("tip_label" = "sampleid"))
+tip_data <- dplyr::left_join(tip_data, pango_lineages, by = c("tip_label" = "taxon"))
+
+
+tip_data$lineage[tip_data$tip_label == "NC_045512.2"] <- "Reference"
+
+
+tip_data <- tip_data %>%
+  mutate(in_verdi = !is.na(hhid),
+  transmission_route = case_when(
+      is.na(hhtrans_mem) ~ NA,
+      hhtrans_mem == FALSE & index==1 ~ "Index",
+      hhtrans_mem == TRUE ~ "Household Transmission",
+      hhtrans_mem == FALSE & index==0 ~ "Community Transmission"),
+  transmission_route = factor(transmission_route, 
+                                   levels = c("Index",
+                                              "Household Transmission",
+                                              "Community Transmission")),
+  lineage_plot = ifelse(used_in_phylogeny=="YES", lineage, NA),
+  lineage_plot = as.factor(lineage_plot),
+  lineage = as.factor(lineage)
+  )
+
+# tip_data <- tip_data %>%
+#   mutate(in_verdi = !is.na(hhid),
+#   community_trans = !hhtrans_mem & index==0,
+#   hh_trans_factor = case_when(
+#       is.na(hhtrans_mem) ~ FALSE,
+#       hhtrans_mem == TRUE ~ TRUE,
+#       hhtrans_mem == FALSE ~ FALSE
+#     ),
+#   community_trans_factor = case_when(
+#       is.na(community_trans) ~ FALSE,
+#       community_trans == TRUE ~ TRUE,
+#       community_trans == FALSE ~ FALSE
+#     ),
+#   lineage = as.factor(lineage)
+#   )
+
+
+# CREATE A FUNCTION TO GET NODE 
+get_node <- function(tree, label) {
+  n_tips <- length(tree$tip.label)
+  match_idx <- which(tree$node.label == label)
+  if (length(match_idx) == 0) stop("Label not found.")
+  return(n_tips + match_idx)
+}
+```
+
+Create the plot
+
+```{r}
+
+
+p <- ggtree(tree, layout = 'circular') %<+% tip_data 
+
+
+library(ggnewscale)
+
+
+p <- p +
+  geom_tree(aes(color = in_verdi), show.legend = FALSE) +
+  scale_color_manual(values = c("TRUE" = "black", "FALSE" = "grey")) +
+  new_scale_color() +  # Allow new color scale for tippoints
+  geom_tippoint(aes(color = as.factor(hhid), 
+                    shape = as.factor(transmission_route)),
+                size = 2, na.rm = TRUE) +
+  scale_shape_manual(values = c("Index" = 4,
+                                "Household Transmission" = 1,
+                                "Community Transmission" = 0),
+                     name = "Transmission Route", na.translate = FALSE) +
+  # Don"t show the legend for Household
+  scale_color_discrete(name = "HOUSEHOLD INDEX", na.translate = FALSE,
+                       guide = "none")
+
+p2 <- p + 
+  geom_fruit(
+         geom=geom_tile,
+         mapping=aes(fill=lineage),
+         position = "auto"
+     ) +
+  scale_fill_discrete(name = "Lineage", na.translate = FALSE) +
+  theme(legend.position = "right")
+
+p2
+
+ggsave("../fig/circular_plot.png", plot = p2,
+       width = 16, height = 16,
+       dpi = 600,
+       units = "in")
+```
+
+Try with a normal layout, to see the evolution of variants.\
+
+```{r}
+library(ggnewscale)
+
+tree_path <- "../analysis/IQtree_LSD/verdiGISAID/correct_label_treetime/timetree.nexus"
+tree <- read.nexus(tree_path)
+
+# DROP the REFERENCE TO GET A BETTER VIEW
+tree <- drop.tip(tree,"NC_045512.2")
+
+
+p <- ggtree(tree, layout = 'rectangular') %<+% tip_data 
+
+# Rotate the tree TO HAVE A VIEW OVER TIME
+node_id_2 <- get_node(tree, "NODE_0000717")
+p <- ggtree::rotate(p, node_id_2)
+
+# PLOT THE TREE
+p <- p +
+  geom_tree(aes(color = in_verdi), show.legend = FALSE) +
+  scale_color_manual(values = c("TRUE" = "black", "FALSE" = "grey")) +
+  new_scale_color() +  # Allow new color scale for tippoints
+  geom_tippoint(aes(color = as.factor(hhid), 
+                    shape = as.factor(transmission_route)),
+                size = 3, na.rm = TRUE) +
+  scale_shape_manual(values = c("Index" = 4,
+                                "Household Transmission" = 1,
+                                "Community Transmission" = 0),
+                     name = "Transmission Route", na.translate = FALSE) +
+  # Don"t show the legend for Household
+  scale_color_discrete(name = "HOUSEHOLD INDEX", na.translate = FALSE,
+                       guide = "none") +
+  # SHOW THE X AXIS AS TIME
+  theme_tree2() + 
+  scale_x_continuous(name = "Time")  
+
+p
+p2 <- p + 
+  geom_fruit(
+         geom=geom_tile,
+         mapping=aes(fill=lineage),
+         position = "auto"
+     ) +
+  scale_fill_discrete(name = "Lineage", na.translate = FALSE) +
+  theme(legend.position = "right")
+
+p2
+
+ggsave("../fig/rectangular_plot.png", plot = p2,
+       width = 16, height = 12,
+       dpi = 600,
+       units = "in")
+```
+
+Try to adjust the legend to make it clearer.
+
+```{r}
+library(scales)
+library(ggplot2)
+library(cowplot)
+library(patchwork)
+library(ggpattern)
+
+num_hhid_in_verdi <- 82
+hh_colors <- hue_pal()(num_hhid_in_verdi)
+gradient_start <- hh_colors[1]  # couleur du premier HHID
+gradient_end   <- hh_colors[82] # couleur du dernier HHID
+
+node_to_zoom <- get_node(tree, "NODE_0001149")
+
+tree_path <- "../analysis/IQtree_LSD/verdiGISAID/correct_label_treetime/timetree.nexus"
+tree <- read.nexus(tree_path)
+
+# DROP the REFERENCE TO GET A BETTER VIEW
+tree <- drop.tip(tree,"NC_045512.2")
+
+
+p <- ggtree(tree, layout = 'rectangular') %<+% tip_data 
+
+# Rotate the tree TO HAVE A VIEW OVER TIME
+node_id_2 <- get_node(tree, "NODE_0000717")
+p <- ggtree::rotate(p, node_id_2)
+
+# PLOT THE TREE
+p <- p +
+  geom_tree(aes(color = in_verdi), show.legend = FALSE) +
+  scale_color_manual(values = c("TRUE" = "black", "FALSE" = "grey")) +
+  new_scale_color() +  # Allow new color scale for tippoints
+  geom_tippoint(aes(color = as.factor(hhid), 
+                    shape = as.factor(transmission_route)),
+                size = 3, na.rm = TRUE) +
+  scale_shape_manual(values = c("Index" = 4,
+                                "Household Transmission" = 1,
+                                "Community Transmission" = 0),
+                     name = "Transmission Route", na.translate = FALSE,
+                     guide = "none") +
+  # Don"t show the legend for Household
+  scale_color_discrete(name = "HOUSEHOLD INDEX", na.translate = FALSE,
+                       guide = "none") +
+  # SHOW THE X AXIS AS TIME
+  theme_tree2() + 
+  scale_x_continuous(name = "Time") +
+  
+  # Highlight the node 
+  geom_highlight(
+    node = node_to_zoom,
+    fill = 'steelblue',
+    alpha=.6
+  )
+  
+  
+
+
+
+library(ggplot2)
+library(cowplot)
+library(magick)
+library(grid)
+
+
+# --- 1. Plot principal avec arbre + geom_fruit + seule légende Lineage ---
+p_main <- p +
+  geom_fruit(
+    geom = geom_tile,
+    mapping = aes(fill = lineage),
+    position = "auto",
+    offset = 0.2
+  ) +
+  scale_fill_discrete(name = "Lineage", na.translate = FALSE) +
+  theme(legend.position = "right") +
+  theme(legend.background = element_rect(colour = 'red', fill = 'white', linetype='solid'))
+
+# --- 2. Générer un petit plot pour récupérer uniquement la légende Transmission Route ---
+# Créer la légende séparée
+p_leg <- ggplot(tip_data, aes(x=1, y=1,shape = transmission_route)) +
+  geom_point() +
+  scale_shape_manual(values = c("Index" = 4,
+                                "Household Transmission" = 1,
+                                "Community Transmission" = 0),
+                     name = "Transmission Route", na.translate = FALSE
+                    )
+
+leg_grob <- cowplot::get_legend(p_leg)
+
+
+# ----------------------- DAMIER GROB -------------
+# Palette de 7 couleurs distinctes
+cols <- hue_pal()(25)
+
+# Construire une matrice damier (ex: 3x3)
+damier <- matrix(rep(cols, length.out = 25), nrow = 5, byrow = TRUE)
+
+# Raster damier
+damier_grob <- rasterGrob(
+  damier,
+  width = unit(1, "npc"),
+  height = unit(1, "npc"),
+  interpolate = FALSE
+)
+
+
+# rectangle noir autour
+border_grob <- rectGrob(
+  x = 0.5, y = 0.5, 
+  width = unit(1, "npc"), height = unit(1, "npc"),
+  gp = gpar(col = "black", fill = NA, lwd = 2)
+)
+
+
+# combiner raster et bordure
+damier_grob_bordered <- grobTree(damier_grob, border_grob)
+
+# ADD A LEGEND RECTANGLE 
+# Coordonnées du rectangle (en fraction du plot)
+x_min <- 0.45
+x_max <- 0.65
+y_min <- 0.45
+y_max <- 0.60
+
+# Crée un rectGrob rouge
+rect_grob <- rectGrob(
+  x = (x_min + x_max)/2,
+  y = (y_min + y_max)/2,
+  width = x_max - x_min,
+  height = y_max - y_min,
+  gp = gpar(col = "red", fill = NA, lwd = 2)
+)
+
+# Plot final avec rectangle
+p_final <- ggdraw(p_main) + 
+  draw_grob(leg_grob, x = 0.5, y = 0.5, width = 0.10, height = 0.1,
+            halign = 0, valign = 0)  +
+  draw_grob(damier_grob_bordered,
+            x = 0.49, y = 0.47,
+            width = 0.02, height = 0.03,
+            halign = 0, valign = 0) +
+  annotate("text", x = 0.52, y = 0.485, label = "Individual Households", hjust = 0, size = 3) +
+  draw_grob(rect_grob)
+
+p_final
+
+
+ggsave("../fig/rectangular_plot_v4.png", plot = p_final,
+       width = 16, height = 12,
+       dpi = 600,
+       units = "in")
+
+```
+
+# Show the lineage only for the study sequence
+
+```{r}
+library(scales)
+library(ggplot2)
+library(cowplot)
+library(patchwork)
+library(ggpattern)
+
+num_hhid_in_verdi <- 82
+hh_colors <- hue_pal()(num_hhid_in_verdi)
+gradient_start <- hh_colors[1]  # couleur du premier HHID
+gradient_end   <- hh_colors[82] # couleur du dernier HHID
+
+node_to_zoom <- get_node(tree, "NODE_0001149")
+
+tree_path <- "../analysis/IQtree_LSD/verdiGISAID/correct_label_treetime/timetree.nexus"
+tree <- read.nexus(tree_path)
+
+# DROP the REFERENCE TO GET A BETTER VIEW
+tree <- drop.tip(tree,"NC_045512.2")
+
+
+p <- ggtree(tree, layout = 'rectangular') %<+% tip_data 
+
+# Rotate the tree TO HAVE A VIEW OVER TIME
+node_id_2 <- get_node(tree, "NODE_0000717")
+p <- ggtree::rotate(p, node_id_2)
+
+# PLOT THE TREE
+p <- p +
+  geom_tree(aes(color = in_verdi), show.legend = FALSE) +
+  scale_color_manual(values = c("TRUE" = "black", "FALSE" = "grey")) +
+  new_scale_color() +  # Allow new color scale for tippoints
+  geom_tippoint(aes(color = as.factor(hhid), 
+                    shape = as.factor(transmission_route)),
+                size = 3, na.rm = TRUE) +
+  scale_shape_manual(values = c("Index" = 4,
+                                "Household Transmission" = 1,
+                                "Community Transmission" = 0),
+                     name = "Transmission Route", na.translate = FALSE,
+                     guide = "none") +
+  # Don"t show the legend for Household
+  scale_color_discrete(name = "HOUSEHOLD INDEX", na.translate = FALSE,
+                       guide = "none") +
+  # SHOW THE X AXIS AS TIME
+  theme_tree2() + 
+  scale_x_continuous(name = "Time") +
+  
+  # Highlight the node 
+  geom_highlight(
+    node = node_to_zoom,
+    fill = 'steelblue',
+    alpha=.6
+  )
+  
+  
+
+
+
+library(ggplot2)
+library(cowplot)
+library(magick)
+library(grid)
+
+
+
+# --- 1. Plot principal avec arbre + geom_fruit + seule légende Lineage ---
+p_main <- p +
+  geom_fruit(
+    geom = geom_tile,
+    mapping = aes(fill = lineage_plot),
+    position = "auto",
+    offset = 0.5
+  ) +
+  scale_fill_discrete(name = "Pango Lineage", na.translate = FALSE) +
+  theme(legend.position = "right",
+        legend.title = element_text(size = 14, face = "bold"),
+        legend.text  = element_text(size = 12)) +
+  theme(legend.background = element_rect(colour = 'red', fill = 'white', linetype='solid'))
+
+# --- 2. Générer un petit plot pour récupérer uniquement la légende Transmission Route ---
+# Créer la légende séparée
+p_leg <- ggplot(tip_data, aes(x=1, y=1,shape = transmission_route)) +
+  geom_point() +
+  scale_shape_manual(values = c("Index" = 4,
+                                "Household Transmission" = 1,
+                                "Community Transmission" = 0),
+                     name = "Transmission Route", na.translate = FALSE
+                    ) +
+  theme(legend.title = element_text(size = 14, face = "bold"),
+        legend.text  = element_text(size = 12))
+
+leg_grob <- cowplot::get_legend(p_leg)
+
+
+# ----------------------- DAMIER GROB -------------
+# Palette de 7 couleurs distinctes
+cols <- hue_pal()(25)
+
+# Construire une matrice damier (ex: 3x3)
+damier <- matrix(rep(cols, length.out = 25), nrow = 5, byrow = TRUE)
+
+# Raster damier
+damier_grob <- rasterGrob(
+  damier,
+  width = unit(1, "npc"),
+  height = unit(1, "npc"),
+  interpolate = FALSE
+)
+
+
+# rectangle noir autour
+border_grob <- rectGrob(
+  x = 0.5, y = 0.5, 
+  width = unit(1, "npc"), height = unit(1, "npc"),
+  gp = gpar(col = "black", fill = NA, lwd = 2)
+)
+
+
+# combiner raster et bordure
+damier_grob_bordered <- grobTree(damier_grob, border_grob)
+
+# ADD A LEGEND RECTANGLE 
+# Coordonnées du rectangle (en fraction du plot)
+x_min <- 0.45
+x_max <- 0.66
+y_min <- 0.45
+y_max <- 0.63
+
+# Crée un rectGrob rouge
+rect_grob <- rectGrob(
+  x = (x_min + x_max)/2,
+  y = (y_min + y_max)/2,
+  width = x_max - x_min,
+  height = y_max - y_min,
+  gp = gpar(col = "red", fill = NA, lwd = 2)
+)
+
+# Plot final avec rectangle
+p_final <- ggdraw(p_main) + 
+  draw_grob(leg_grob, x = 0.5, y = 0.5, width = 0.10, height = 0.1,
+            halign = 0, valign = 0)  +
+  draw_grob(damier_grob_bordered,
+            x = 0.46, y = 0.46,
+            width = 0.02, height = 0.03,
+            halign = 0, valign = 0) +
+  annotate("text", x = 0.485, y = 0.47, label = "Individual Households", hjust = 0, size = 4.5) +
+  draw_grob(rect_grob)
+
+p_final
+
+ggsave("../fig/rectangular_plot_v5.tiff", plot = p_final,
+       width = 12, height = 8,
+       dpi = 600,
+       units = "in")
+```
+
+Try to zoom in on some part of the tree
+
+```{r}
+
+library(scales)
+library(ggplot2)
+library(cowplot)
+library(patchwork)
+library(ggpattern)
+library(phangorn)
+
+
+num_hhid_in_verdi <- 82
+hh_colors <- hue_pal()(num_hhid_in_verdi)
+gradient_start <- hh_colors[1]  # couleur du premier HHID
+gradient_end   <- hh_colors[82] # couleur du dernier HHID
+
+
+
+tree_path <- "../analysis/IQtree_LSD/verdiGISAID/correct_label_treetime/timetree.nexus"
+tree <- read.nexus(tree_path)
+
+# DROP the REFERENCE TO GET A BETTER VIEW
+#tree <- drop.tip(tree,"NC_045512.2")
+
+
+
+# Find all descendant tips of node 15
+drop_node1 <- get_node(tree, "NODE_0001213")
+drop_node2 <- get_node(tree, "NODE_0001204")
+drop_node3 <- get_node(tree, "NODE_0001183")
+desc_tips1 <- Descendants(tree, drop_node1, type = "tips")[[1]]
+desc_tips2 <- Descendants(tree, drop_node2, type = "tips")[[1]]
+desc_tips3 <- Descendants(tree, drop_node3, type = "tips")[[1]]
+tip_labels1 <- tree$tip.label[desc_tips1]
+tip_labels2 <- tree$tip.label[desc_tips2]
+tip_labels3 <- tree$tip.label[desc_tips3]
+all_tip_tables <- c(tip_labels1,tip_labels2, tip_labels3)
+# Drop them from the tree
+tree <- drop.tip(tree, all_tip_tables)
+
+
+
+
+node_to_zoom <- get_node(tree, "NODE_0001149")
+subtree <- extract.clade(tree, node_to_zoom)
+
+
+p <- ggtree(subtree, layout = 'rectangular') %<+% tip_data 
+# PLOT THE TREE
+p <- p +
+  geom_tree(aes(color = in_verdi), show.legend = FALSE) +
+  scale_color_manual(values = c("TRUE" = "black", "FALSE" = "grey")) +
+  new_scale_color() +  # Allow new color scale for tippoints
+  geom_tippoint(aes(color = as.factor(hhid), 
+                    shape = as.factor(transmission_route)),
+                size = 3, stroke = 2, na.rm = TRUE) +
+  scale_shape_manual(values = c("Index" = 4,
+                                "Household Transmission" = 1,
+                                "Community Transmission" = 0),
+                     name = "Transmission Route", na.translate = FALSE,
+                  guide = "none") +
+  # Don"t show the legend for Household
+  scale_color_discrete(name = "Individual Households", na.translate = FALSE,
+                       guide = "none")
+
+# Add a black rectangle squre
+
+xlim <- ggplot_build(p)$layout$panel_params[[1]]$x.range
+ylim <- ggplot_build(p)$layout$panel_params[[1]]$y.range
+
+p <- p + geom_rect(
+  xmin = xlim[1], xmax = xlim[2],
+  ymin = ylim[1], ymax = ylim[2],
+  color = "black", fill = NA, linewidth = 4
+)
+
+
+ggsave("../fig/rectangular_plot_subset.png", plot = p,
+       width = 6, height = 4,
+       dpi = 600,
+       units = "in")
+
+```
+
+# Lineage proportions
+
+```{r}
+# 
+
+
+# Add he pango lineages
+lineage_proportion <- tip_data %>% 
+  filter(used_in_phylogeny == "YES") %>% 
+  count(lineage) %>% 
+  mutate(percent = 100 * n / sum(n))
+```

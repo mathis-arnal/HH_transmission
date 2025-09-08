@@ -1,0 +1,186 @@
+---
+title: "Forest_Plot"
+format: html
+editor: visual
+---
+
+# Multivariable Analysis
+
+We divide the household size into 2 categories, more than 4 and less or equal to 4. (ref: less or equal to 4.)
+
+Ngene is a continuous variable. (NGene from the index case)
+
+Age of the index case ( categorical variable, children and adult) (ref: adult)
+
+IgG positive is a categorical variable. (IgG positive of the household member ) (ref IgG negative)
+
+```{r}
+library(tidyverse)
+
+# Table 2A - Household Infection (ATK/PCR Positive)
+data_2A <- tibble(
+  Variable = c(
+    "Household size > 4",
+    "PCR Ct (N gene)",
+    "SARS CoV-2 IgG positivity",
+    "Index case <18 years"
+  ),
+  aRR = c(1.183394, 0.9331639, 0.4513489, 1.369424),
+  CI_lower = c(0.649312, 0.8601096, 0.2959972, 0.759806),
+  CI_upper = c(2.156777, 1.012423, 0.6882356, 2.46816),
+  p_value = c(0.582, 0.096, 0.000, 0.296),
+  Group = "ATK/PCR Positivity"
+)
+
+# Table 2B - positive ATK/PCR or positive SARS CoV-2 IgM
+data_2B <- tibble(
+  Variable = c(
+    "Household size > 4",
+    "PCR Ct (N gene)",
+    "SARS CoV-2 IgG positivity",
+    "Index case <18 years"
+  ),
+  aRR = c(1.202228, 0.9369308, 0.6033814, 1.426804),
+  CI_lower = c(0.6615247, 0.86561, 0.4114068, 0.7958252),
+  CI_upper = c(2.184879, 1.014128, 0.884937, 2.558061),
+  p_value = c(0.546, 0.107, 0.010, 0.233),
+  Group = "ATK/PCR/IgM Positivity"
+)
+
+# Table 2C - Household Transmission
+data_2C <- tibble(
+  Variable = c(
+    "Household size > 4",
+    "PCR Ct (N gene)",
+    "SARS CoV-2 IgG positivity",
+    "Index case <18 years"
+  ),
+  aRR = c(1.32, 0.84, 0.41, 1.02),       # Remplace les valeurs par les nouvelles si nécessaire
+  CI_lower = c(0.61, 0.75, 0.22, 0.48),
+  CI_upper = c(2.83, 0.94, 0.77, 2.14),
+  p_value = c(0.479, 0.002, 0.005, 0.967),
+  Group = "Household Transmission"
+)
+
+data_all <- bind_rows(data_2A, data_2B, data_2C) %>%
+  mutate(Variable = factor(Variable, levels = rev(unique(Variable))))
+
+p <- ggplot(data_all, aes(x = aRR, y = Variable, color = Group)) +
+  geom_point(position = position_dodge(width = 0.6), size = 3) +
+  geom_errorbar(aes(xmin = CI_lower, xmax = CI_upper),
+                width = 0.2,
+                position = position_dodge(width = 0.6)) +
+  geom_vline(xintercept = 1, linetype = "dashed") +
+  scale_color_manual(values = c("Household Transmission" = "#1b9e77",
+                                "ATK/PCR Positivity" = "#d95f02",
+                                "ATK/PCR/IgM Positivity" = "#7570b3")) +
+  labs(x = "Adjusted Risk Ratio (aRR)",
+       y = NULL,
+       color = "Outcome") +
+  theme_minimal(base_size = 14) +
+  theme(panel.grid.minor = element_blank()) +
+  theme(legend.background = element_rect(colour = 'black', fill = 'white', linetype='solid'))
+
+p
+
+```
+
+```{r}
+ggsave(
+  filename = "../fig/forest_plot_.png", 
+  plot = p,
+  bg = "white",
+  width = 10, height = 5, dpi = 600,
+  units = "in")
+```
+
+## Univariable for HH transmission
+
+Because we have access to Characteristic of Index and Household, it is relevant to see , doing two forest plot, the risk ratio of for the transmitting , and the risk ratio for the getting infected.
+
+### Index Characteristic
+
+```{r}
+library(tidyverse)
+
+data_uni <- tibble(
+  Variable = c(
+    "Index case wears a mask indoors",
+    "Age < 18 years",
+    "XBB Lineage",
+    "PCR cycle thresholds (N gene)"
+  ),
+  RR = c(1.61 , 0.87,1.65, 0.84),
+  CI_lower = c(0.38, 0.40,0.80, 0.76),
+  CI_upper = c(6.76, 1.89,3.42, 0.93),
+  p_value = c(0.519, 0.728,0.175, 0.001)
+)
+
+# Axis max
+x_max <- 5
+
+# Create a capped CI column
+data_plot <- data_uni %>%
+  mutate(CI_upper_cap = pmin(CI_upper, x_max))
+
+# Plot
+ggplot(data_plot, aes(x = RR, y = fct_rev(Variable))) +
+  geom_point(size = 3) +
+  geom_errorbarh(aes(xmin = CI_lower, xmax = CI_upper_cap), height = 0.2) +
+  # Add arrows where CI is beyond axis
+  geom_segment(data = filter(data_plot, CI_upper > x_max),
+               aes(x = CI_upper_cap, xend = x_max, y = fct_rev(Variable),
+                   yend = fct_rev(Variable)),
+               arrow = arrow(length = unit(0.15, "inches"), type = "closed"),
+               inherit.aes = FALSE) +
+  geom_vline(xintercept = 1, linetype = "dashed") +
+  xlim(0, x_max) +
+  labs(x = "Univariable Risk Ratio (RR)", y = NULL,
+       title = "Index Characteristics HH Transmission") +
+  theme_minimal(base_size = 14) +
+  theme(panel.grid.minor = element_blank())
+
+```
+
+## House member characteristic
+
+```{r}
+library(tidyverse)
+library(grid)
+
+# Données
+data_house <- tribble(
+  ~Variable, ~RR, ~CI_lower, ~CI_upper, ~p_value,
+  "Latest vaccine ≥6 months", 1.02, 0.48, 2.21, 0.950,
+  "Total vaccination <3 doses", 1.00, 0.54, 1.86, 0.998,
+  "IgG positivity", 0.39, 0.21, 0.74, 0.004,
+  "BMI <18.5 (underweight)", 1.66, 0.46, 5.96, 0.437,
+  "BMI ≥23 (overweight)", 1.35, 0.73, 2.48, 0.336,
+  "Wears Mask Indoor", 1.61, 0.38, 6.76, 0.519
+)
+
+# Axe max
+x_max <- 5
+
+# On tronque l'IC si elle dépasse l'axe
+data_plot <- data_house %>%
+  mutate(CI_upper_cap = pmin(CI_upper, x_max))
+
+# Plot
+ggplot(data_plot, aes(x = RR, y = fct_rev(Variable))) +
+  geom_point(size = 3) +
+  geom_errorbarh(aes(xmin = CI_lower, xmax = CI_upper_cap), height = 0.2) +
+  # flèche si IC dépasse la borne
+  geom_segment(data = filter(data_plot, CI_upper > x_max),
+               aes(x = CI_upper_cap, xend = x_max,
+                   y = fct_rev(Variable), yend = fct_rev(Variable)),
+               arrow = arrow(length = unit(0.15, "inches"), type = "closed"),
+               inherit.aes = FALSE) +
+  geom_vline(xintercept = 1, linetype = "dashed") +
+  xlim(0, x_max) +
+  labs(x = "Univariable Risk Ratio (RR)", y = NULL,
+       title = "HH Members Characteristics HH Transmission") +
+  theme_minimal(base_size = 14) +
+  theme(panel.grid.minor = element_blank())
+
+```

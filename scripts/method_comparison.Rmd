@@ -1,0 +1,899 @@
+
+# -------------------- SETUP -------------------
+```{r}
+library(ape)
+library(dplyr)
+library(stringr)
+library(ggtree)
+library(ggplot2)
+
+source("analysis_fcts.R")
+
+verdi_df <- read.csv("../datasets/verdi_seq_df.csv")
+
+```
+
+
+# Treecluster analysis
+
+```{r}
+vg_tc_1SNPs_res <- treecluster_analysis(
+  tree_file = "../analysis/IQTREE_LSD/lsd_iqtree/lsd_iqtree.timetree.nwk",
+  treecluster_file = "../analysis/IQTREE_LSD/treecluster/1SNPs_treecluster.txt",
+  threshold  = 3.4e-5,
+  title = "vg_tc_1SNPs"
+)
+
+vg_tc_2.5SNPs_res <- treecluster_analysis(
+  tree_file = "../analysis/IQTREE_LSD/lsd_iqtree/lsd_iqtree.timetree.nwk",
+  treecluster_file = "../analysis/IQTREE_LSD/treecluster/2.5SNPs_treecluster.txt",
+  threshold  = 8.4e-5,
+  title = "vg_tc_2.5SNPs"
+)
+
+
+vg_tc_6SNPs_res <- treecluster_analysis(
+  tree_file = "../analysis/IQTREE_LSD/lsd_iqtree/lsd_iqtree.timetree.nwk",
+  treecluster_file = "../analysis/IQTREE_LSD/treecluster/6SNPs_treecluster.txt",
+  threshold  = 2e-4,
+  title = "vg_tc_6SNPs"
+)
+
+f_vg_tc_1SNPs_res <- treecluster_analysis(
+  tree_file = "../analysis/IQTREE_LSD/lsd_iqtree/lsd_iqtree.timetree.nwk",
+  treecluster_file = "../analysis/IQTREE_LSD/filtered_treecluster/1SNPs_treecluster.txt",
+  threshold  = 3.4e-5,
+  title = "f_vg_tc_1SNPs"
+)
+
+f_vg_tc_2.5SNPs_res <- treecluster_analysis(
+  tree_file = "../analysis/IQTREE_LSD/lsd_iqtree/lsd_iqtree.timetree.nwk",
+  treecluster_file = "../analysis/IQTREE_LSD/filtered_treecluster/2.5SNPs_treecluster.txt",
+  threshold  = 8.4e-5,
+  title = "f_vg_tc_2.5SNPs"
+)
+
+
+f_vg_tc_6SNPs_res <- treecluster_analysis(
+  tree_file = "../analysis/IQTREE_LSD/lsd_iqtree/lsd_iqtree.timetree.nwk",
+  treecluster_file = "../analysis/IQTREE_LSD/filtered_treecluster/6SNPs_treecluster.txt",
+  threshold  = 2e-4,
+  title = "f_vg_tc_6SNPs"
+)
+```
+
+
+# hclust analysis
+```{r}
+vg_hc_1SNPs_res <- hclust_analysis(
+  tree_file = "../analysis/IQTREE_LSD/lsd_iqtree/lsd_iqtree.timetree.nwk",
+  verdi_df = verdi_df,
+  threshold  = 3.4e-5,
+  title = "vg_hc_1SNPs"
+)
+
+vg_hc_2.5SNPs_res <- hclust_analysis(
+  tree_file = "../analysis/IQTREE_LSD/lsd_iqtree/lsd_iqtree.timetree.nwk",
+  verdi_df = verdi_df,
+  threshold  = 8.4e-5,
+  title = "vg_hc_2.5SNPs"
+)
+
+vg_hc_6SNPs_res <- hclust_analysis(
+  tree_file = "../analysis/IQTREE_LSD/lsd_iqtree/lsd_iqtree.timetree.nwk",
+  verdi_df = verdi_df,
+  threshold  = 2e-4,
+  title = "vg_hc_6SNPs"
+)
+
+#  FILTERED ANALYSIS
+
+f_vg_hc_1SNPs_res <- hclust_analysis(
+  tree_file = "../analysis/IQTREE_LSD/filtered_lsd_iqtree/iqtree.timetree.nwk",
+  verdi_df = verdi_df,
+  threshold  = 3.4e-5,
+  title = "f_vg_hc_1SNPs"
+)
+
+f_vg_hc_2.5SNPs_res <- hclust_analysis(
+  tree_file = "../analysis/IQTREE_LSD/filtered_lsd_iqtree/iqtree.timetree.nwk",
+  verdi_df = verdi_df,
+  threshold  = 8.4e-5,
+  title = "f_vg_hc_2.5SNPs"
+)
+
+f_vg_hc_6SNPs_res <- hclust_analysis(
+  tree_file = "../analysis/IQTREE_LSD/filtered_lsd_iqtree/iqtree.timetree.nwk",
+  verdi_df = verdi_df,
+  threshold  = 2e-4,
+  title = "f_vg_hc_6SNPs"
+)
+```
+# Verdi dataset
+
+# TREECLUSTER
+
+```{r}
+v_tc_1SNPs_res <- treecluster_analysis(
+  tree_file = "../analysis/IQtree_LSD/verdi_iqtree/lsd_iqtree.timetree.nwk",
+  treecluster_file = "../analysis/IQtree_LSD/treecluster/1SNPs_treecluster.txt",
+  threshold  = 3.4e-5,
+  title = "v_tc_1SNPs"
+)
+
+v_tc_2.5SNPs_res <- treecluster_analysis(
+  tree_file = "../analysis/IQtree_LSD/verdi_iqtree/lsd_iqtree.timetree.nwk",
+  treecluster_file = "../analysis/IQtree_LSD/treecluster/2.5SNPs_treecluster.txt",
+  threshold  = 8.4e-5,
+  title = "v_tc_2.5SNPs"
+)
+
+
+v_tc_6SNPs_res <- treecluster_analysis(
+  tree_file = "../analysis/IQtree_LSD/verdi_iqtree/lsd_iqtree.timetree.nwk",
+  treecluster_file = "../analysis/IQtree_LSD/treecluster/6SNPs_treecluster.txt",
+  threshold  = 2e-4,
+  title = "v_tc_6SNPs"
+)
+
+# Filtered analysis
+
+f_v_tc_1SNPs_res <- treecluster_analysis(
+  tree_file = "../analysis/IQtree_LSD/filtered_verdi_iqtree/lsd_iqtree.timetree.nwk",
+  treecluster_file = "../analysis/IQtree_LSD/filtered_treecluster/1SNPs_treecluster.txt",
+  threshold  = 3.4e-5,
+  title = "f_v_tc_1SNPs"
+)
+
+f_v_tc_2.5SNPs_res <- treecluster_analysis(
+  tree_file = "../analysis/IQtree_LSD/filtered_verdi_iqtree/lsd_iqtree.timetree.nwk",
+  treecluster_file = "../analysis/IQtree_LSD/filtered_treecluster/2.5SNPs_treecluster.txt",
+  threshold  = 8.4e-5,
+  title = "f_v_tc_2.5SNPs"
+)
+
+
+f_v_tc_6SNPs_res <- treecluster_analysis(
+  tree_file = "../analysis/IQtree_LSD/filtered_verdi_iqtree/lsd_iqtree.timetree.nwk",
+  treecluster_file = "../analysis/IQtree_LSD/filtered_treecluster/6SNPs_treecluster.txt",
+  threshold  = 2e-4,
+  title = "f_v_tc_6SNPs"
+)
+```
+
+
+## HCLUST
+
+```{r}
+v_hc_1SNPs_res <- hclust_analysis(
+  tree_file = "../analysis/IQtree_LSD/verdi_iqtree/lsd_iqtree.timetree.nwk",
+  verdi_df = verdi_df,
+  threshold  = 3.4e-5,
+  title = "v_hc_1SNPs"
+)
+
+v_hc_2.5SNPs_res <- hclust_analysis(
+  tree_file = "../analysis/IQtree_LSD/verdi_iqtree/lsd_iqtree.timetree.nwk",
+  verdi_df = verdi_df,
+  threshold  = 8.4e-5,
+  title = "v_hc_2.5SNPs"
+)
+
+v_hc_6SNPs_res <- hclust_analysis(
+  tree_file = "../analysis/IQtree_LSD/verdi_iqtree/lsd_iqtree.timetree.nwk",
+  verdi_df = verdi_df,
+  threshold  = 2e-4,
+  title = "v_hc_6SNPs"
+)
+
+# Filtered analysis 
+f_v_hc_1SNPs_res <- hclust_analysis(
+  tree_file = "../analysis/IQtree_LSD/filtered_verdi_iqtree/lsd_iqtree.timetree.nwk",
+  verdi_df = verdi_df,
+  threshold  = 3.4e-5,
+  title = "f_v_hc_1SNPs"
+)
+
+f_v_hc_2.5SNPs_res <- hclust_analysis(
+  tree_file = "../analysis/IQtree_LSD/filtered_verdi_iqtree/lsd_iqtree.timetree.nwk",
+  verdi_df = verdi_df,
+  threshold  = 8.4e-5,
+  title = "f_v_hc_2.5SNPs"
+)
+
+f_v_hc_6SNPs_res <- hclust_analysis(
+  tree_file = "../analysis/IQtree_LSD/filtered_verdi_iqtree/lsd_iqtree.timetree.nwk",
+  verdi_df = verdi_df,
+  threshold  = 2e-4,
+  title = "f_v_hc_6SNPs"
+)
+
+```
+
+# ---------------------- CLUSTER RES HEATMAP -------------
+
+```{r}
+library(purrr)
+library(tidyr)
+library(dplyr)
+
+tables_list <- list(
+  # Compare 1 SNP 
+  f_vg_tc_1SNPs_res$infected_hh_table,
+  vg_tc_1SNPs_res$infected_hh_table,
+  f_v_tc_1SNPs_res$infected_hh_table,
+  v_tc_1SNPs_res$infected_hh_table,
+  f_vg_hc_1SNPs_res$infected_hh_table,
+  vg_hc_1SNPs_res$infected_hh_table,
+  f_v_hc_1SNPs_res$infected_hh_table,
+  v_hc_1SNPs_res$infected_hh_table,
+  # 2.5 SNPS
+  f_vg_tc_2.5SNPs_res$infected_hh_table,
+  vg_tc_2.5SNPs_res$infected_hh_table,
+  f_v_tc_2.5SNPs_res$infected_hh_table,
+  v_tc_2.5SNPs_res$infected_hh_table,
+  f_vg_hc_2.5SNPs_res$infected_hh_table,
+  vg_hc_2.5SNPs_res$infected_hh_table,
+  f_v_hc_2.5SNPs_res$infected_hh_table,
+  v_hc_2.5SNPs_res$infected_hh_table,
+  
+  # 6 SNPS
+  f_vg_tc_6SNPs_res$infected_hh_table,
+  vg_tc_6SNPs_res$infected_hh_table,
+  f_v_tc_6SNPs_res$infected_hh_table,
+  v_tc_6SNPs_res$infected_hh_table,
+  f_vg_hc_6SNPs_res$infected_hh_table,
+  vg_hc_6SNPs_res$infected_hh_table,
+  f_v_hc_6SNPs_res$infected_hh_table,
+  v_hc_6SNPs_res$infected_hh_table
+)
+
+summary_df <- reduce(tables_list, full_join, by = "hhid")
+
+# We keep only the households that are considered true in one of the method
+infected_only_df <- summary_df %>%
+  rowwise() %>%
+  filter(any(c_across(-hhid))) %>%
+  ungroup()
+
+heatmap_data <- infected_only_df  %>%
+  pivot_longer(-hhid, names_to = "method", values_to = "infected")
+
+# Define the order of methods based on the original list order
+
+method_order <- names(summary_df)[-1]
+heatmap_data$method <- factor(heatmap_data$method, levels = method_order)
+
+# Sort hhid by number of TRUE values
+heatmap_data <- heatmap_data %>%
+  group_by(hhid) %>%
+  mutate(infection_score = sum(infected)) %>%
+  ungroup() %>%
+  arrange(desc(infection_score), hhid)
+
+
+heatmap_data$hhid <- factor(heatmap_data$hhid, levels = unique(heatmap_data$hhid))
+
+
+ggplot(heatmap_data, aes(x = method, y = hhid, fill = infected)) +
+  geom_tile(color = "white") +
+  scale_fill_manual(values = c("TRUE" = "green", "FALSE" = "red")) +
+  theme_minimal() +
+  labs(x = "Clustering method", y = "HHID", fill = "Infected") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+On decide de garder vg_tc_2.5 SNPS (on suit le workflow du papier de Nature). 21 HH transmissions.
+
+```{r}
+source("analysis_fcts.R")
+vg_tc_2.5SNPs_res <- treecluster_analysis(
+  tree_file = "../analysis/IQTREE_LSD/lsd_iqtree/lsd_iqtree.timetree.nwk",
+  treecluster_file = "../analysis/IQTREE_LSD/treecluster/2.5SNPs_treecluster.txt",
+  threshold  = 8.4e-5,
+  title = "vg_tc_2.5SNPs"
+)
+cluster_table <- vg_tc_2.5SNPs_res$cluster_table
+write.csv(cluster_table, "../analysis/IQTREE_LSD/hhtrans_results.csv", row.names = FALSE)
+
+#phylo_summary_plots("../analysis/IQTREE_LSD/lsd_iqtree/lsd_iqtree.timetree.nwk", verdi_df)
+```
+
+
+
+# ------------------------- MAHIDOL WORKFLOW ---------------------------
+
+```{r}
+library(ape)
+verdiGISAID_tree <- read.tree("../analysis/IQtree_LSD/lsd_iqtree/lsd_iqtree.timetree.nwk")
+phylo_summary_plots("../analysis/IQtree_LSD/filtered_verdi_iqtree/lsd_iqtree.timetree.nwk", verdi_df)
+
+mahidol_threshold <- 60/365
+
+
+# Treetime
+treetime <- read.tree("../analysis/IQtree_LSD/verdiGISAID/treetime/nwk_timetree.newick")
+
+clustering_metrics <- phylo_summary_plots("../analysis/IQtree_LSD/verdiGISAID/treetime/nwk_timetree.newick",
+                    verdi_df,
+                    cutoffs= seq(1/365, 60/365, by = 1/365))
+
+treetime_clustering <- hclust_analysis("../analysis/IQtree_LSD/verdiGISAID/treetime/nwk_timetree.newick", verdi_df,
+                threshold = 16/365, title = "60 Days")
+```
+
+Investigate the results
+```{r}
+source("analysis_fcts.R")
+clustering_metrics <- phylo_summary_plots("../analysis/IQtree_LSD/verdiGISAID/treetime/nwk_timetree.newick",
+                    verdi_df,
+                    cutoffs= seq(1/365, 60/365, by = 1/365))
+
+clustering_metrics$cutoff_plot
+
+hh_df <- clustering_metrics$hhtrans_table
+# We can see at what day threshold the hh transmisson is considered
+hh_df <- hh_df %>% 
+  distinct(sampleid, .keep_all = TRUE)
+```
+---------- Evolution of number of households -----------
+
+HH037 is added if we have a threshold of more than 16 days.
+Number of hhtransmission is consistent between 16 days and 60 days (23 households), bu not the number of mem infected.
+
+----- We should look at the member that are getting clustered  -------------
+
+at 18 day, 	ht08903_231219_inf is getting clustered
+at 20 day, ht02704_221023_inf is getting clustered
+at 25 day, ht06302_230519_inf is getting clustered
+at 58 day, ht08302_231212_inf is getting clustered
+
+
+We choose to select a threshold of 16 days (2 SNPs), as indicated in the scientific literature (see Zotero).
+```{r}
+treetime_clustering <- hclust_analysis("../analysis/IQtree_LSD/verdiGISAID/treetime/nwk_timetree.newick", verdi_df,
+                threshold = round(16/365,3), title = "16 Days ( 2 SNPs)")
+cluster_table <- treetime_clustering$cluster_table
+write.csv(cluster_table, "../analysis/IQTREE_LSD/hhtrans_results.csv", row.names = FALSE)
+```
+
+Now, let's have a look at the bootstrap values.
+     ---------Why use bootstrap support when applying a fixed SNP threshold?---------
+
+     --------- 1. Account for phylogenetic uncertainty-------------
+Your 2 SNP cutoff assumes the tree topology and branch lengths are correct.
+
+But phylogenetic inference is subject to noise, alignment issues, and limited data.
+
+Bootstrap replicates show how stable the inferred relationships are.
+
+    ----- 2. Increase confidence in specific transmission links--------
+Suppose samples A and B differ by ≤2 SNPs on the best ML tree.
+If the same pair appears within 2 SNPs in 95% of bootstrap trees, you have strong evidence that this is a robust transmission link.
+If it only appears in 10% of bootstrap trees, the link is less reliable — it could be an artifact of a specific tree topology.
+
+```{bash}
+iqtree2 -s aligned_verdiGISAIDref_seq.fasta -m GTR+G -B 1000 -nt 16 -o NC_045512.2 --prefix lsd_iqtree_bootstraps --date verdiGISAIDref_df.txt --date-ci 100 --write-bootstrap
+
+```
+# ----- TREETIME  CLUSTERING METRICS WITH CONFIDENCE INTERVAL -----------
+
+
+```{r}
+library(purrr)
+library(tidyr)
+# Step 1: Get all the main clustering metrics needed for plot
+summarize_clustering_metrics <- function(tree_path, verdi_df, cutoffs, type = "Nexus", tree_id = NULL) {
+  phylo_df <- verdi_df %>% filter(used_in_phylogeny == "YES")
+  phy <- read_and_prune_tree(tree_path, phylo_df$sampleid, type)
+  hc <- hclust(as.dist(cophenetic.phylo(phy)), method = "average")
+
+  metric_list <- lapply(cutoffs, function(cutoff) {
+    clusters <- cutree(hc, h = cutoff)
+    df_clusters <- data.frame(sampleid = names(clusters), cluster = clusters)
+    ann <- prepare_annotation_data(verdi_df, df_clusters) %>%
+      filter(hh_infected == TRUE) %>%
+      select(sampleid, hhid, index)
+
+    tibble(
+      cutoff = cutoff,
+      tree_id = tree_id,
+      num_clusters = length(unique(clusters)),
+      num_hhid = length(unique(ann$hhid)),
+      num_hhtrans_mem = sum(ann$index == 0)
+    )
+  })
+
+  # Convert wide to long format
+  bind_rows(metric_list) %>%
+    pivot_longer(cols = starts_with("num_"), names_to = "metric", values_to = "value")
+}
+
+tree_dir <- "../analysis/IQtree_LSD/verdiGISAID/treetime/bootstrap_trees_1e3"
+
+# Step 2: apply it to all the trees
+all_metrics <- map_dfr(1:100, function(i) {
+  run_id <- sprintf("%04d", i)
+  tree_file <- file.path(tree_dir, paste0("/treetime_run_", run_id, ".nexus"))
+  summarize_clustering_metrics(tree_file, verdi_df, cutoffs = seq(0.005, 0.17, by = 0.002), tree_id = run_id)
+})
+
+# Step 3: get the mean and Confidence interval
+summary_stats <- all_metrics %>%
+  group_by(cutoff, metric) %>%
+  summarise(
+    mean = mean(value, na.rm = TRUE),
+    lower = quantile(value, 0.025, na.rm = TRUE),
+    upper = quantile(value, 0.975, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Step 4: Plot
+ggplot(summary_stats, aes(x = cutoff, y = mean, color = metric)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = metric), alpha = 0.2, color = NA) +
+  geom_vline(xintercept = c(15/365, 30/365, 60/365), linetype = "dashed", color = c("black", "green", "red")) +
+  labs(title = "Clustering Metrics vs. Distance Cutoff (Molecular Clock 1e-3) ",
+       x = "Cutoff (fraction of year)", y = "Metric Value") +
+  theme_minimal()
+
+```
+What clock rate should I use ? The one inferred from treetime ? or from literature ?
+From treetime: 1.526e-03.
+From literature: 0.79×10–3 substitutions per site per year according to Nature article in Bangkok for Omicron wave. 
+=> Essayer aussi avec ce taux de substitution 
+=> Essayer de refaire avec Nexstrain, pour faire leur taux de substitution (1xe-3) (30.53 subs per year)
+
+
+Now, let's see the PROBABILITY BOOTSTRAP THRESHOLD MATRIX
+# ------------ PROBABILITY BOOTSTRAP THRESHOLD MATRIX ---------------
+
+```{r}
+library(purrr)
+library(tidyr)
+library(tibble)
+library(dplyr)
+library(ape)
+library(stringr)
+
+tree_dir <- "../analysis/IQtree_LSD/verdiGISAID/treetime/bootstrap_trees_1e3"
+
+
+get_sample_hhtrans_table <- function(tree_path, verdi_df, cutoffs = c(15, 30, 60)/365, type = "Nexus", tree_id = NULL) {
+  phylo_df <- verdi_df %>% filter(used_in_phylogeny == "YES")
+  phy <- read_and_prune_tree(tree_path, phylo_df$sampleid, type)
+  hc <- hclust(as.dist(cophenetic.phylo(phy)), method = "average")
+
+  sample_level_list <- lapply(cutoffs, function(cutoff) {
+    clusters <- cutree(hc, h = cutoff)
+    df_clusters <- data.frame(sampleid = names(clusters), cluster = clusters)
+
+    ann <- prepare_annotation_data(verdi_df, df_clusters)
+
+    ann_summary <- ann %>%
+      select(sampleid, phy_hhtrans_mem) %>%
+      mutate(cutoff = cutoff, tree_id = tree_id)
+
+    return(ann_summary)
+  })
+
+  bind_rows(sample_level_list)
+}
+
+
+# Apply across all trees
+cutoffs <- c(36,37,38,39,40,41,42,43,44,45,46,47,48,49,50)/365
+
+sample_probs_raw <- map_dfr(1:1000, function(i) {
+  run_id <- sprintf("%04d", i)
+  tree_file <- file.path(tree_dir, paste0("treetime_run_", run_id, ".nexus"))
+  get_sample_hhtrans_table(tree_file, verdi_df, cutoffs, tree_id = run_id)
+})
+
+sample_probs <- sample_probs_raw %>%
+  group_by(sampleid, cutoff) %>%
+  summarise(prob = mean(phy_hhtrans_mem, na.rm = TRUE), .groups = "drop") %>%
+  mutate(day_cutoff = paste0(round(cutoff * 365), "d")) %>% 
+  group_by(sampleid) %>%
+  filter(sum(prob, na.rm = TRUE) > 0.1) %>%
+  ungroup() %>% 
+  mutate(day_cutoff = factor(day_cutoff, levels = paste0(round(cutoffs * 365), "d")),
+         sampleid = str_sub(sampleid, end=7),
+         sampleid = as.factor(sampleid))
+
+# Get order of sample IDs by 5d and 10d probability (descending)
+
+df_scores <- sample_probs %>%
+  group_by(sampleid) %>%
+  summarise(cumulative_score = sum(prob)) %>%
+  arrange(desc(cumulative_score))
+
+sample_probs$sampleid <- factor(sample_probs$sampleid, levels = df_scores$sampleid)
+
+library(tibble)
+library(forcats)
+
+library(ggplot2)
+
+
+# 
+ggplot(sample_probs, aes(x = day_cutoff, y = sampleid, fill = prob)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "red", na.value = "grey90") +
+  labs(
+    title = "Household Transmission Probability per Sample and Cutoff (1000 bootstraps)",
+    x = "Distance Cutoff",
+    y = "Sample ID",
+    fill = "Probability"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 6),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5)
+  )
+
+
+```
+Autour d'un threshold de 15d, On a de l'incertitude autour de ht02404, ht02704, ht01103, ht05903 et ht01102 (5).
+
+```{r}
+d15_hhtransmission <- sample_probs %>% 
+  filter(day_cutoff =="15d", prob > 0.90)
+d20_hhtransmission <- sample_probs %>% 
+  filter(day_cutoff =="20d", prob > 0.90)
+d25_hhtransmission <- sample_probs %>% 
+  filter(day_cutoff =="25d", prob > 0.90)
+d27_hhtransmission <- sample_probs %>% 
+  filter(day_cutoff =="27d", prob > 0.90)
+d30_hhtransmission <- sample_probs %>% 
+  filter(day_cutoff =="30d", prob > 0.90)
+d35_hhtransmission <- sample_probs %>% 
+  filter(day_cutoff =="35d", prob > 0.90)
+d33_hhtransmission <- sample_probs %>% 
+  filter(day_cutoff =="33d", prob > 0.90)
+d37_hhtransmission <- sample_probs %>% 
+  filter(day_cutoff =="33d", prob > 0.90)
+setdiff(d30_hhtransmission$sampleid, d15_hhtransmission$sampleid)
+setdiff(d35_hhtransmission$sampleid, d30_hhtransmission$sampleid)
+
+```
+We choose d35 HH transmission ! (Around 3 SNPS treshold if we take into account our molecular clock)
+```{r}
+write.csv(d35_hhtransmission, "../analysis/IQtree_LSD/verdiGISAID/treetime/threshold_hhtrans/d35_hhtransmission.csv")
+write.csv(d30_hhtransmission, "../analysis/IQtree_LSD/verdiGISAID/treetime/threshold_hhtrans/d30_hhtransmission.csv")
+write.csv(d15_hhtransmission, "../analysis/IQtree_LSD/verdiGISAID/treetime/threshold_hhtrans/d15_hhtransmission.csv")
+write.csv(d20_hhtransmission, "../analysis/IQtree_LSD/verdiGISAID/treetime/threshold_hhtrans/d20_hhtransmission.csv")
+
+d35_hhtrans_pid <- d35_hhtransmission %>% 
+  pull(sampleid)
+d35_hhtrans_pid <- as.character(d35_hhtrans_pid)
+write.csv(d35_hhtrans_pid, "../analysis/IQtree_LSD/verdiGISAID/treetime/threshold_hhtrans/d35_hhtrans_pid.csv",
+          row.names = FALSE)
+
+d15_hhtrans_pid <- d15_hhtransmission %>% 
+  pull(sampleid)
+d15_hhtrans_pid <- as.character(d15_hhtrans_pid)
+write.csv(d15_hhtrans_pid, "../analysis/IQtree_LSD/verdiGISAID/treetime/threshold_hhtrans/d15_hhtrans_pid.csv",
+          row.names = FALSE)
+
+```
+
+
+on a 21 household transmission dans plus de 95 pourcents des bootstraps.
+ht01102 est rajoute a 73%., ht01103 et ht05903 autour de 50%.
+
+# ----------------- Nexstrain clockrate ---------------
+ On utilise un evolutionary rate de 1xe-3, avec 0.5e-3 de clock st dev
+# clock st dev sensitivity analysis
+```{r}
+library(tidyverse)
+summarize_clustering_metrics <- function(tree_path, verdi_df, cutoffs, type = "Nexus", tree_id = NULL) {
+  if (is.null(tree_id)) {
+    tree_id <- gsub("^run_|\\.nexus$", "", basename(tree_path))
+  }
+
+  phylo_df <- verdi_df %>% filter(used_in_phylogeny == "YES")
+  phy <- read_and_prune_tree(tree_path, phylo_df$sampleid, type)
+  hc <- hclust(as.dist(cophenetic.phylo(phy)), method = "average")
+
+  metric_list <- lapply(cutoffs, function(cutoff) {
+    clusters <- cutree(hc, h = cutoff)
+    df_clusters <- data.frame(sampleid = names(clusters), cluster = clusters)
+    ann <- prepare_annotation_data(verdi_df, df_clusters) %>%
+      filter(hh_infected == TRUE) %>%
+      select(sampleid, hhid, index)
+
+    tibble(
+      cutoff = cutoff,
+      tree_id = tree_id,
+      num_clusters = length(unique(clusters)),
+      num_hhid = length(unique(ann$hhid)),
+      num_hhtrans_mem = sum(ann$index == 0)
+    )
+  })
+
+  bind_rows(metric_list) %>%
+    pivot_longer(cols = starts_with("num_"), names_to = "metric", values_to = "value")
+}
+
+
+tree_paths <- c(
+                "../analysis/IQtree_LSD/verdiGISAID/molecular_clock_analysis/tt_stddev_0.0005/timetree.nexus",
+                "../analysis/IQtree_LSD/verdiGISAID/molecular_clock_analysis/tt_stddev_0.001/timetree.nexus"
+                )
+                
+
+# Step 2: apply it to all the trees
+cutoffs <- seq(0.005, 0.17, by = 0.002)
+
+all_metrics <- map_dfr(tree_paths, function(path) {
+  summarize_clustering_metrics(tree_path = path, verdi_df = verdi_df, cutoffs = cutoffs)
+})
+
+# Step 3: get the mean and Confidence interval
+summary_stats <- all_metrics %>%
+  group_by(cutoff, metric) %>%
+  summarise(
+    mean = mean(value, na.rm = TRUE),
+    lower = quantile(value, 0.025, na.rm = TRUE),
+    upper = quantile(value, 0.975, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Step 4: Plot
+ggplot(summary_stats, aes(x = cutoff, y = mean, color = metric)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = metric), alpha = 0.2, color = NA) +
+  geom_vline(xintercept = c(15/365, 30/365, 60/365), linetype = "dashed", color = c("black", "green", "red")) +
+  labs(title = "Clustering Metrics vs. Distance Cutoff (Bootstrapped Mean ± 95% CI)",
+       x = "Cutoff (fraction of year)", y = "Metric Value") +
+  theme_minimal()
+
+summary_stats <- summary_stats %>% 
+  filter(metric =="num_hhid")
+```
+Ca ne bouge pas beaucoup en fonction du evolutionary rate : 
+ On utilise un evolutionary rate de 1xe-3, avec 0.5e-3 de clock st dev
+ 
+```{r}
+tree_path <- "../analysis/IQtree_LSD/verdiGISAID/molecular_clock_analysis/tt_stddev_0.001/timetree.nexus"
+phylo_df <- verdi_df %>% 
+  filter(used_in_phylogeny == "YES")
+treetime_clustering <- hclust_analysis(tree_path, verdi_df,
+                threshold = round(16/365,3), title = "16 Days ( 2 SNPs)", type = "Nexus")
+treetime_clustering$cluster_table
+```
+
+```{r}
+mem_inf_treshold_1e3 <- treetime_clustering$cluster_table %>% 
+  filter(cutoff_hhtransmission)
+mem_inf_treshold_1e3 <- mem_inf_treshold_1e3$pid
+mem_inf_treshold_1e3 <- tolower(mem_inf_treshold_1e3)
+```
+
+
+
+# ------------------------ KEEP POLYTOMIES ------------------
+```{r}
+tree_path <- "../analysis/IQtree_LSD/verdiGISAID/treetime/keep_polytomies/timetree.nexus"
+phylo_df <- verdi_df %>% 
+  filter(used_in_phylogeny == "YES")
+treetime_clustering <- hclust_analysis(tree_path, verdi_df,
+                threshold = round(30/365,3), title = "30 Days ( ? SNPs)", type = "Nexus")
+clust_table <- treetime_clustering$cluster_table %>% 
+  filter(cutoff_hhtransmission) %>% 
+  pull(pid)
+mem_inf_treshold_30d <- tolower(clust_table)
+# Check the distance for HT059
+dist_mat <- treetime_clustering$patristic_distances
+ht059_dist <- dist_mat["ht05901_230424_d1","ht05903_230429_inf"]
+ht037_dist <- dist_mat["ht03701_221114_d1", "ht03703_221121_inf"]
+```
+
+
+
+# -------------------------  RELABEL HT083 TREETIME ---------------
+
+```{r}
+library(ggtree)
+# Relabel 
+tree <- read.tree("../analysis/IQtree_LSD/verdiGISAID/verdiGISAID_iqtree/no_outliers_tree.nwk")
+tree$tip.label[tree$tip.label == "ht08302_231212_inf"] <- "ht08302_231112_inf"
+#write.tree(tree, "../analysis/IQtree_LSD/verdiGISAID/verdiGISAID_iqtree/corrected_no_outliers_tree.nwk")  # save the modified tree
+verdi_df <- read.csv("../datasets/verdi_seq_df.csv")
+verdi_df$sampleid[verdi_df$sampleid == "ht08302_231212_inf"] <- "ht08302_231112_inf"
+
+
+tt_35d_clustering <- hclust_analysis("../analysis/IQtree_LSD/verdiGISAID/correct_label_treetime/timetree.nexus", verdi_df, threshold = round(35/365,3), title = "35 Days (3SNPS)", type = "Nexus")
+cluster_table_35d <- tt_35d_clustering$cluster_table
+patristic_distance <- tt_35d_clustering$patristic_distances
+ht083_dist <- patristic_distance["ht08301_231107_d1","ht08302_231112_inf"]
+
+
+tt_16d_clustering <- hclust_analysis("../analysis/IQtree_LSD/verdiGISAID/correct_label_treetime/timetree.nexus", verdi_df, threshold = round(16/365,3), title = "16 Days (2SNPS)", type = "Nexus")
+cluster_table_16d <- tt_16d_clustering$cluster_table
+```
+
+
+
+# ------------------------------- OLD WORKFLOW -----------------------
+```{r}
+treetime_data <- read_csv("../analysis/IQtree_LSD/data/no_outliers_treetime_verdiGISAIDref_df.csv")
+write.table(treetime_data, file = "../analysis/IQtree_LSD/data/no_outliers_beast_verdiGISAIDref_df.tsv", sep = "\t", row.names = FALSE, quote = FALSE)
+```
+
+
+```{r}
+nexus_tree <- read.nexus("../analysis/IQtree_LSD/verdiGISAID/treetime/timetree.nexus")
+newick_tree <- read.tree("../analysis/IQtree_LSD/verdiGISAID/treetime/nwk_timetree.newick")
+pruned_nexus_tree <- read_and_prune_tree("../analysis/IQtree_LSD/verdiGISAID/treetime/timetree.nexus",
+                                         phylo_df$sampleid,
+                                         type = "Nexus")
+treetime_clustering <- hclust_analysis("../analysis/IQtree_LSD/verdiGISAID/treetime/timetree.nexus", verdi_df,
+                threshold = round(16/365,3), title = "16 Days ( 2 SNPs)", type = "Nexus")
+treetime_clustering$cluster_table
+```
+
+```{r}
+"../analysis/IQtree_LSD/verdiGISAID/treetime/bootstrap_trees"
+```
+
+
+
+```{r}
+threshold = 30/365
+tree_file <- "../analysis/IQtree_LSD/verdiGISAID/treetime/nwk_timetree.newick"
+
+phylo_df <- verdi_df %>% filter(used_in_phylogeny == "YES")
+pruned_tree <- read_and_prune_tree(tree_file, phylo_df$sampleid)
+
+patristic_distances <- cophenetic.phylo(pruned_tree)
+hc <- hclust(as.dist(patristic_distances), method = "average")
+clusters <- cutree(hc, h = threshold)
+df_clusters <- data.frame(sampleid = names(clusters), cluster = clusters)
+
+cluster_table <-phylo_df %>% 
+    left_join(df_clusters, by = "sampleid") %>%
+    #filter(!is.na(cluster)) %>%
+    group_by(hhid, cluster) %>%
+    mutate(hh_infected = any(index == 1) & any(index == 0)) %>%
+    ungroup() %>%
+    mutate(phy_hhtrans_mem = ifelse(index == 0 & hh_infected, TRUE, FALSE))
+```
+
+
+
+```{r}
+phylo_df <- verdi_df %>% 
+  subset(used_in_phylogeny == "YES")
+unfiltered_iq_phy <- read.tree("../analysis/IQTREE_LSD/lsd_iqtree/lsd_iqtree.timetree.nwk")
+unfiltered_iq_phy <- drop.tip(unfiltered_iq_phy, setdiff(unfiltered_iq_phy$tip.label, phylo_df$sampleid))
+# Calculate the patristic distance matrix
+patristic_distances <- cophenetic.phylo(unfiltered_iq_phy)
+hc <- hclust(as.dist(patristic_distances), method = "average")
+# Définir un seuil de distance
+seuil_distance <- 8.4e-5  # Remplacez par votre seuil choisi
+
+# Couper l'arbre de clustering à la hauteur du seuil
+clusters <- cutree(hc, h = seuil_distance)
+
+# Afficher les clusters
+nb_clusters <- as.numeric(length(unique(clusters)))
+
+
+# Create the data for the plot
+df_clusters <- data.frame(sampleid = names(clusters), cluster = clusters)
+
+# Assuming verdi_df and df_clusters are already defined dataframes
+hhtransmission_df <- phylo_df %>%
+  mutate(hhid = as.factor(hhid),
+         index = as.factor(index)) %>%
+  # Left join with df_clusters
+  left_join(df_clusters, by = "sampleid")
+
+# We take off the NA values in cluster (We didn"t include this sequences in the phylogeny)
+hhtransmission_df<- hhtransmission_df%>%
+  # Group by hhid and cluster, then determine if hh_infected
+  group_by(hhid, cluster) %>%
+  mutate(hh_infected = ifelse(is.na(cluster), NA, any(index == 1) & any(index == 0))) %>%
+  ungroup() %>% 
+  mutate(phy_hhtrans_mem = ifelse(index == 0 & hh_infected, TRUE, FALSE))
+
+
+low_cutoff_hhtransmission_df <- data.frame(pid = hhtransmission_df$pid,
+                                          low_cutoff_hhtransmission = hhtransmission_df$phy_hhtrans_mem,
+                                          low_cutoff_hhtransmission_houselevel = hhtransmission_df$hh_infected)
+
+# Préparer les données : ne garder que les points avec hh_infected == TRUE
+annotation_data <- hhtransmission_df %>%
+  filter(hh_infected == TRUE) %>%
+  select(sampleid, hhid, index)
+
+# Vérifier que sampleid correspond aux labels de l’arbre
+# print(head(phy$tip.label))
+# print(head(annotation_data$sampleid))
+levels(annotation_data$index) <- c("Index","Household Member")
+# Créer le plot
+p <- ggtree(phy) %<+% annotation_data +  # jointure sur sampleid
+  geom_tippoint(aes(color = as.factor(hhid), 
+                    shape = as.factor(index)), 
+                size = 3, na.rm = TRUE) +  # na.rm=TRUE pour cacher les points non infectés
+  scale_shape_manual(values = c("Index" = 16, "Household Member" = 8),
+                     name = "INFECTION STATUS",
+                     na.translate = FALSE) +  # rond = 16, étoile = 8
+  scale_color_discrete(name = "HOUSEHOLD INDEX", na.translate = FALSE) +  # Supprimer NA dans la légende des couleurs
+  theme_tree2() +
+  guides(col = guide_legend(nrow = 8)) +
+  ggtitle(paste("NEXTSTRAIN WORKFLOW (122 samples, cutoff", seuil_distance," (2.5 SNPs))"))
+
+print(p)
+print(paste("Pour un cutoff de ",seuil_distance, " il y a ", nb_clusters, "clusters"))
+```
+
+
+# Comparison between filtered and unfiltered distances
+
+```{r}
+library(ggtree)
+library(dplyr)
+phylo_df <- verdi_df %>%
+    subset(used_in_phylogeny == "YES")
+
+
+#library(ggplot2)
+unfiltered_phy <- read.tree("../analysis/IQTREE_LSD/IQTREE_res/lsd_iqtree/lsd_iqtree.timetree.nwk")
+unfiltered_phy <- drop.tip(unfiltered_phy, setdiff(unfiltered_phy$tip.label, phylo_df$sampleid))
+
+
+# Calculate the patristic distance matrix
+patristic_distances <- cophenetic.phylo(unfiltered_phy)
+# Extraire les distances uniques de la matrice
+distances <- patristic_distances[upper.tri(patristic_distances)]
+# Résumé statistique des distances
+print("unfiltered lsd iqtree with GISAID")
+summary(distances)
+
+
+
+unfiltered_iq_phy <- read.tree("../analysis/IQTREE_LSD/IQTREE_res/lsd_iqtree/lsd_iqtree.contree")
+unfiltered_iq_phy <- drop.tip(unfiltered_lsd_phy, setdiff(unfiltered_iq_phy$tip.label, phylo_df$sampleid))
+
+
+# Calculate the patristic distance matrix
+patristic_distances <- cophenetic.phylo(unfiltered_iq_phy)
+# Extraire les distances uniques de la matrice
+distances <- patristic_distances[upper.tri(patristic_distances)]
+# Résumé statistique des distances
+print("unfiltered iqtree with GISAID")
+
+summary(distances)
+
+
+
+filtered_phy <- read.tree("../analysis/Nexstrain_workflow/treetime/newick_divergence_tree.nwk")
+filtered_phy <- drop.tip(filtered_phy, setdiff(filtered_phy$tip.label, phylo_df$sampleid))
+
+
+# Calculate the patristic distance matrix
+patristic_distances <- cophenetic.phylo(filtered_phy)
+# Extraire les distances uniques de la matrice
+distances <- patristic_distances[upper.tri(patristic_distances)]
+# Résumé statistique des distances
+print("Filtered TREETIME")
+
+summary(distances)
+
+
+filtered_iq_phy <- read.tree("../analysis/Nexstrain_workflow/iqtree/masked_aligned.contree")
+filtered_iq_phy <- drop.tip(filtered_phy, setdiff(filtered_phy$tip.label, phylo_df$sampleid))
+
+
+# Calculate the patristic distance matrix
+patristic_distances <- cophenetic.phylo(filtered_iq_phy)
+# Extraire les distances uniques de la matrice
+distances <- patristic_distances[upper.tri(patristic_distances)]
+# Résumé statistique des distances
+print("Filtered IQTREE")
+summary(distances)
+```
+

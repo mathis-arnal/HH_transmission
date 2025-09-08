@@ -1,0 +1,288 @@
+---
+title: "Nextstrain_analysis"
+output: html_document
+date: "2025-06-06"
+---
+
+```{r}
+library(ape)
+library(ggplot2)
+library(ggtree)
+library(dplyr)
+library(stringr)
+```
+
+```{r}
+verdi_seq <- read.FASTA("../reads/masked_aligned_final_seq.fasta")
+
+final_df <- data.frame(sampleid = names(verdi_seq))
+final_df <- final_df %>%
+  mutate(
+    pid = toupper(str_sub(sampleid, 1, 7)),
+    hhid = str_extract(sampleid, "(?<=ht)\\d+") %>% substr(1, 3),
+    index = ifelse(str_extract(sampleid, "(?<=ht)\\d+") %>% substr(5,5)=="1", 1,0))
+```
+
+
+# We compute the IQtree with bootstrap, and then use treetime
+```{bash}
+cd ../reads/
+iqtree -s masked_aligned_final_seq.fasta -o MN908947.3  -bb 1000 -pre iqtree/masked_aligned
+treetime --tree iqtree/masked_aligned.contree --aln masked_aligned_final_seq.fasta --dates ../treetime_data.csv --reroot MN908947.3 
+```
+
+The molecular clock model computed with the data is :
+Root-Tip-Regression:
+ --rate:	1.036e-03
+ --r^2:  	0.81
+
+The result are similar to those seen in literature. We can use it.
+
+# Exploratory Analysis
+
+We compute several graphs to  look at the distribution of the data,
+ and choose the best treshold.
+```{r}
+library(ape)
+library(ggtree)
+library(dplyr)
+#library(ggplot2)
+phy <- read.nexus("D:/VERDI/Mathis/final_seq/treetime/timetree.nexus")
+
+#phy$tip.label <- sub("_run1_sup$", "", mahidol_seq)
+
+
+
+# Calculate the patristic distance matrix
+patristic_distances <- cophenetic.phylo(phy)
+# Extraire les distances uniques de la matrice
+distances <- patristic_distances[upper.tri(patristic_distances)]
+# Résumé statistique des distances
+summary(distances)
+# Visualiser la distribution des distances
+hist(distances, breaks = 30, col = "lightblue", main = "Patristic Distance Distribution (122 samples)")
+
+
+# --------- CLUSTERING -----------
+# Appliquer le clustering hiérarchique
+hc <- hclust(as.dist(patristic_distances), method = "average")
+
+# Définir les valeurs de cutoff
+cutoffs <- seq(0.1, 2, by=0.1)
+
+# Initialiser un vecteur pour stocker le nombre de clusters
+num_clusters <- numeric(length(cutoffs))
+
+# Boucle sur les valeurs de cutoff
+for (i in 1:length(cutoffs)) {
+  cutoff <- cutoffs[i]
+  clusters <- cutree(hc, h=cutoff)
+  num_clusters[i] <- length(unique(clusters))
+}
+
+# Créer le diagramme de coude
+plot(cutoffs, num_clusters, type="b", pch=19, xlab="Cutoff", ylab="Number of clusters", main=" Patristic Distance Elbow Diagran")
+```
+# Number of hh transmission and  number households where it occured
+
+```{r}
+# Définir les valeurs de cutoff
+cutoffs <- seq(0.1, 2, by=0.1)
+
+# Initialiser un vecteur pour stocker le nombre de clusters, de hhid et des personnes infectees
+num_clusters <- numeric(length(cutoffs))
+num_hhtrans_mem <- numeric(length(cutoffs))
+num_hhid <- numeric(length(cutoffs))
+# Create the data for the plot
+df_clusters <- data.frame(sampleid = names(clusters), cluster = clusters)
+
+# Perform all operations in a single pipeline
+annotation_data <- final_df %>%
+  select(sampleid, hhid, index) %>%
+  mutate(hhid = as.factor(hhid),
+         index = as.factor(index)) %>%
+  left_join(df_clusters, by = "sampleid") #%>%
+  group_by(hhid, cluster) %>%
+  mutate(hh_infected = ifelse(any(index == 1) & any(index == 0), TRUE, FALSE)) %>%
+  ungroup() %>%
+  filter(hh_infected == TRUE) %>%
+  select(sampleid, hhid, index)
+
+
+# Boucle sur les valeurs de cutoff
+for (i in 1:length(cutoffs)) {
+  cutoff <- cutoffs[i]
+  clusters <- cutree(hc, h=cutoff)
+  df_clusters <- data.frame(sampleid = names(clusters), cluster = clusters)
+  # Get the data we want
+  annotation_data <- final_df %>%
+    select(sampleid, hhid, index) %>%
+    mutate(hhid = as.factor(hhid),
+           index = as.factor(index)) %>%
+    left_join(df_clusters, by = "sampleid") %>%
+    group_by(hhid, cluster) %>%
+    mutate(hh_infected = ifelse(any(index == 1) & any(index == 0), TRUE, FALSE)) %>%
+    ungroup() %>%
+    filter(hh_infected == TRUE) %>%
+    select(sampleid, hhid, index)
+  # Get the data
+  num_clusters[i] <- length(unique(clusters))
+  num_hhid[i] <- length(unique(annotation_data$hhid))
+  num_hhtrans_mem[i] <- sum(annotation_data$index==0)
+  # 
+}
+
+plot_data <- data.frame(
+  cutoffs = cutoffs,
+  num_clusters = num_clusters,
+  num_hhid = num_hhid,
+  num_hhtrans_mem = num_hhtrans_mem
+)
+
+# Melt the dataframe to long format for ggplot2
+library(reshape2)
+melted_data <- melt(plot_data, id.vars = "cutoffs", variable.name = "metric", value.name = "value")
+
+# Create the plot
+ggplot(melted_data, aes(x = cutoffs, y = value, color = metric)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Plot of num_clusters, num_hhid, and num_hhtrans_mem based on cutoffs",
+       x = "Cutoffs",
+       y = "Value",
+       color = "Metric")
+```
+
+```{r}
+# Définir un seuil de distance
+seuil_distance <- 2e-4  # Remplacez par votre seuil choisi
+
+# Couper l'arbre de clustering à la hauteur du seuil
+clusters <- cutree(hc, h = seuil_distance)
+
+# Afficher les clusters
+nb_clusters <- as.numeric(length(unique(clusters)))
+
+
+# Create the data for the plot
+df_clusters <- data.frame(sampleid = names(clusters), cluster = clusters)
+
+# Assuming final_df and df_clusters are already defined dataframes
+hhtransmission_df <- final_df %>%
+  mutate(hhid = as.factor(hhid),
+         index = as.factor(index)) %>%
+  # Left join with df_clusters
+  left_join(df_clusters, by = "sampleid")
+
+# We take off the NA values in cluster (We didn"t include this sequences in the phylogeny)
+hhtransmission_df <- hhtransmission_df[!is.na(hhtransmission_df$cluster), ]
+hhtransmission_df<- hhtransmission_df%>%
+  # Group by hhid and cluster, then determine if hh_infected
+  group_by(hhid, cluster) %>%
+  mutate(hh_infected = ifelse(is.na(cluster), NA, any(index == 1) & any(index == 0))) %>%
+  ungroup() %>% 
+  mutate(phy_hhtrans_mem = ifelse(index == 0 & hh_infected, TRUE, FALSE))
+
+
+low_cutoff_hhtransmission_df <- data.frame(pid = hhtransmission_df$pid,
+                                          low_cutoff_hhtransmission = hhtransmission_df$phy_hhtrans_mem,
+                                          low_cutoff_hhtransmission_houselevel = hhtransmission_df$hh_infected)
+
+# Préparer les données : ne garder que les points avec hh_infected == TRUE
+annotation_data <- hhtransmission_df %>%
+  filter(hh_infected == TRUE) %>%
+  select(sampleid, hhid, index)
+
+# Vérifier que sampleid correspond aux labels de l’arbre
+# print(head(phy$tip.label))
+# print(head(annotation_data$sampleid))
+
+# Créer le plot
+p <- ggtree(phy) %<+% annotation_data +  # jointure sur sampleid
+  geom_tippoint(aes(color = as.factor(hhid), 
+                    shape = as.factor(index)), 
+                size = 3, na.rm = TRUE) +  # na.rm=TRUE pour cacher les points non infectés
+  scale_shape_manual(values = c("0" = 16, "1" = 8),na.translate = FALSE) +  # rond = 16, étoile = 8
+  scale_color_discrete(name = "HOUSEHOLD INDEX", na.translate = FALSE) +  # Supprimer NA dans la légende des couleurs
+  theme_tree2() +
+  guides(col = guide_legend(nrow = 8)) +
+  ggtitle(paste("NEXTSTRAIN WORKFLOW (122 samples, cutoff", seuil_distance,"," ,nb_clusters,"clusters )"))
+
+print(p)
+print(paste("Pour un cutoff de ",seuil_distance, " il y a ", nb_clusters, "clusters"))
+```
+
+# High Cluster
+
+```{r}
+library(ggplot2)
+# Définir un seuil de distance
+seuil_distance <- 1  # Remplacez par votre seuil choisi
+
+# Couper l'arbre de clustering à la hauteur du seuil
+clusters <- cutree(hc, h = seuil_distance)
+
+# Afficher les clusters
+nb_clusters <- as.numeric(length(unique(clusters)))
+
+
+# Create the data for the plot
+df_clusters <- data.frame(sampleid = names(clusters), cluster = clusters)
+
+# Assuming final_df and df_clusters are already defined dataframes
+hhtransmission_df <- final_df %>%
+  mutate(hhid = as.factor(hhid),
+         index = as.factor(index)) %>%
+  # Left join with df_clusters
+  left_join(df_clusters, by = "sampleid") 
+
+hhtransmission_df <- hhtransmission_df[!is.na(hhtransmission_df$cluster), ]
+
+hhtransmission_df <- hhtransmission_df%>%
+  # Group by hhid and cluster, then determine if hh_infected
+  group_by(hhid, cluster) %>%
+  mutate(hh_infected = ifelse(is.na(cluster), NA, any(index == 1) & any(index == 0))) %>%
+  ungroup() %>% 
+  # Get if it as a household transmission
+  mutate(phy_hhtrans_mem = ifelse(index == 0 & hh_infected, TRUE, FALSE))
+
+high_cutoff_hhtransmission_df <- data.frame(pid = hhtransmission_df$pid,
+                                            high_cutoff_hhtransmission = hhtransmission_df$phy_hhtrans_mem,
+                                            high_cutoff_hhtransmission_houselevel=hhtransmission_df$hh_infected)
+
+
+# Préparer les données : ne garder que les points avec hh_infected == TRUE
+annotation_data <- hhtransmission_df %>%
+  filter(hh_infected == TRUE) %>%
+  select(sampleid, hhid, index)
+
+# Vérifier que sampleid correspond aux labels de l’arbre
+# print(head(phy$tip.label))
+# print(head(annotation_data$sampleid))
+
+# Créer le plot
+p <- ggtree(phy) %<+% annotation_data +  # jointure sur sampleid
+  geom_tippoint(aes(color = as.factor(hhid), 
+                    shape = as.factor(index)), 
+                size = 3, na.rm = TRUE) +  # na.rm=TRUE pour cacher les points non infectés
+  scale_shape_manual(values = c("0" = 16, "1" = 8),na.translate = FALSE) +  # rond = 16, étoile = 8
+  scale_color_discrete(name = "HOUSEHOLD INDEX", na.translate = FALSE) +  # Supprimer NA dans la légende des couleurs
+  theme_tree2() +
+  guides(col = guide_legend(nrow = 8)) +
+  ggtitle(paste("NEXTSTRAIN WORKFLOW (122 samples, cutoff", seuil_distance,"," ,nb_clusters,"clusters )"))
+
+print(p)
+print(paste("Pour un cutoff de ",seuil_distance, " il y a ", nb_clusters, "clusters"))
+```
+
+# RESULTS
+
+We have chosen two cutoffs, one low cutoff (0.5) with high confidence, and a high cutoff (1) with lower confidence.
+
+```{r}
+cutoff_df <- merge(low_cutoff_hhtransmission_df, high_cutoff_hhtransmission_df, by="pid")
+write.csv(cutoff_df, "../analysis/Nexstrain_workflow/nextstrain_workflow_res.csv", )
+```
+
+
+

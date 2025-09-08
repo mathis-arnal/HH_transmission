@@ -1,0 +1,169 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+## SAR PLOT
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Tes données formatées
+df_2A <- tribble(
+  ~Level, ~Category,         ~Percent, ~CI_lower, ~CI_upper, ~p_value,
+  "Household-level", "Total",          33.3, 24.4, 43.6,NA,
+  "Household-level", "<18 years",      33.3, 20.0, 46.7,1.000,
+  "Household-level", "≥18 years",      33.3, 19.6, 47.1,NA,
+  "Individual-level", "Total",         23.5, 17.2, 32.1,NA,
+  "Individual-level", "<18 years",     26.1, 17.2, 39.8,0.468,
+  "Individual-level", "≥18 years",     21.4, 12.8, 32.6,NA
+)
+
+# Graphe
+p_2A <- ggplot(df_2A, aes(x = Category, y = Percent, color = Category)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.1, size = 1) +
+  geom_text(aes(label = paste0(Percent, "%")), hjust = -0.5, size = 4) +
+  facet_wrap(~Level, nrow = 1) +
+  scale_y_continuous(labels = function(x) paste0(x, "%"), limits = c(0, 50)) +
+  #scale_color_manual(values = c("Total" = "red", "<18 years" = "green", "≥18 years" = "blue")) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "none",
+        panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank(),
+        plot.title = element_text(face = "bold"),
+        strip.text = element_text(size = 14, face = "bold")) +
+  labs(
+    title = "Main analysis based on RT-PCR positivity",
+    y = "Secondary attack rate",
+    x = NULL
+  ) +
+  # Ajouter p-values sous les facettes
+  geom_text(
+    data = df_2A %>% filter(!is.na(p_value)),
+    aes(x = 2, y = 5, label = paste0("p = ", p_value)),
+    color = "black", inherit.aes = FALSE, size = 4
+  )+
+  theme(panel.spacing = unit(2, "cm"))
+
+
+p_2A
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Données : Sensitivity analysis (RT-PCR or IgM)
+df_2B <- tribble(
+  ~Level, ~Category,       ~Percent, ~CI_lower, ~CI_upper, ~p_value,
+  "Household-level", "Total",        35.5, 26.3, 45.8, NA,
+  "Household-level", "<18 years",    35.4, 21.9, 49.0, 0.989,
+  "Household-level", "≥18 years",    35.6, 21.6, 49.6, NA,
+  "Individual-level", "Total",       24.4, 18.1, 33.0, NA,
+  "Individual-level", "<18 years",   27.7, 18.5, 41.5, 0.395,
+  "Individual-level", "≥18 years",   20.8, 13.3, 32.5, NA
+)
+
+# Graphe
+p_2B <- ggplot(df_2B, aes(x = Category, y = Percent, color = Category)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.1, size = 1) +
+  geom_text(aes(label = paste0(Percent, "%")),hjust = -0.5, size = 4) +
+  facet_wrap(~Level, nrow = 1) +
+  scale_y_continuous(labels = function(x) paste0(x, "%"), limits = c(0, 50)) +
+  #scale_color_manual(values = c("Total" = "red", "<18 years" = "green", "≥18 years" = "blue")) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "none",
+        panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank(),
+        plot.title = element_text(face = "bold"),
+        strip.text = element_text(size = 14, face = "bold")) +
+  labs(
+    title = "Sensitivity analysis based on RT-PCR or SARS-CoV-2 IgM positivity",
+    y = "Secondary attack rate",
+    x = NULL
+  ) +
+  # Ajouter p-values sous les facettes
+  geom_text(
+    data = df_2B %>% filter(!is.na(p_value)),
+    aes(x = 2, y = 5, label = paste0("p = ", p_value)),
+    color = "black", inherit.aes = FALSE, size = 4
+  ) +
+  theme(panel.spacing = unit(2, "cm"))
+
+p_2B
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Données : Sensitivity analysis (phylogeny)
+df_2C <- tribble(
+  ~Level, ~Category,       ~Percent, ~CI_lower, ~CI_upper, ~p_value,
+  "Household-level", "Total",        25.3, 17.3, 35.3, NA,
+  "Household-level", "<18 years",    21.3, 9.6, 33.0, 0.364,
+  "Household-level", "≥18 years",    29.6, 16.0, 43.0, NA,
+  "Individual-level", "Total",       15.4, 10.6, 22.8, NA,
+  "Individual-level", "<18 years",   14.5, 8.1, 26.0, 0.728,
+  "Individual-level", "≥18 years",   16.5, 9.8, 27.7, NA
+)
+
+p_2C <- ggplot(df_2C, aes(x = Category, y = Percent, color = Category)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.1, size = 1) +
+  geom_text(aes(label = paste0(Percent, "%")), hjust = -0.5, size = 4) +
+  facet_wrap(~Level, nrow = 1) +
+  scale_y_continuous(labels = function(x) paste0(x, "%"), limits = c(0, 50)) +
+  #scale_color_manual(values = c("Total" = "red", "<18 years" = "green", "≥18 years" = "blue")) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "none",
+       panel.grid.minor = element_blank(),
+       panel.grid.major.x = element_blank(),
+       plot.title = element_text(face = "bold"),
+        strip.text = element_text(size = 14, face = "bold")) +
+  labs(
+    title = "Sensitivity analysis based on RT-PCR and phylogenetic analysis",
+    y = "Secondary attack rate",
+    x = NULL
+  ) +
+  # Ajouter p-values sous les facettes
+  geom_text(
+    data = df_2C %>% filter(!is.na(p_value)),
+    aes(x = 2, y = 5, label = paste0("p = ", p_value)),
+    color = "black", inherit.aes = FALSE, size = 4
+  ) +
+  theme(panel.spacing = unit(2, "cm"))
+
+p_2C
+
+```
+
+## Combine the 3 plots
+
+```{r}
+library(cowplot)
+final_plot <- plot_grid(
+  labels = c("A","B","C"),
+  p_2A, p_2B, p_2C,
+  ncol = 1,     # 1 colonne
+  align = "v" # alignement vertical
+)
+
+final_plot
+```
+
+Save the plot
+
+```{r}
+# Sauvegarder en PNG
+ggsave(
+  filename = "../fig/SAR_plot_v2.png", 
+  plot = final_plot,
+  bg = "white",
+  width = 12, height = 8, dpi = 300
+)
+```

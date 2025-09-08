@@ -1,0 +1,1011 @@
+---
+title: "Nextclade annotation"
+output: github_document
+---
+
+# Install the packages
+```{r}
+#install.packages("treeio")
+#install.packages("BiocManager")
+#install.packages("dplyr")
+#BiocManager::install("ggtree")
+#install.packages("devtools")
+library('devtools')
+install_version("ggplot2", version = "3.4.4", repos = "http://cran.us.r-project.org")
+
+```
+
+# Launch the packages
+```{r}
+library('ggplot2')
+library("dplyr")
+library("treeio")
+library("ggtree")
+library('devtools')
+library(ape)
+
+# Special version in order for the plot to work correctly
+
+date_to_float <- function(date) {
+  date <- as.Date(date)
+  year <- as.numeric(format(date, "%Y"))
+  day_of_year <- as.numeric(format(date, "%j"))
+  year + (day_of_year - 1) / 365
+}
+```
+
+# Filter the metadata
+```{r}
+epidemio_data <- read.csv("D:/VERDI/Mathis/dataset_hhverdi_endformat_250121.csv")
+#summary(epidemio_data)
+
+sequence_data <- read.csv("sequence_data.csv")
+    
+treetime_data <- sequence_data %>% 
+              select(seq_id, date) %>% 
+              rename(name = seq_id) %>% 
+              mutate(date = date_to_float(date))
+
+#write.csv(treetime_data, "D:/VERDI/Mathis/treetime_data.csv", row.names = FALSE, quote = FALSE)
+
+
+# Filter the 5 sequences we are not using in the study
+#sequences_to_keep <- treetime_data$name
+sequences <- read.FASTA("D:/VERDI/Mathis/final_seq/verdi_cat.fasta")
+#sequences_filtrees <- sequences[names(sequences) %in% sequences_to_keep]
+#seq_rejetee <- sequences_to_keep[(!(sequences_to_keep %in% names(sequences)))]
+```
+
+Comme on fait ici de l'épidémiologie génomique, on ne garde que les personnes infectés
+```{r}
+sub_data <- epidemio_data %>%
+            select(sampleid, hhid, index) %>%
+            filter(sampleid != "") %>% 
+            mutate(hhid = as.factor(hhid),
+                   index = as.factor(index))
+```
+
+On ne veut garder que les foyers d'au moins une personne
+```{r}
+# Filtrer les hhid qui possèdent au moins une valeur 0 dans index
+sub_data <- sub_data %>%
+  group_by(hhid) %>%
+  filter(any(index == 0)) %>%
+  ungroup()
+print(sum(unique(sub_data$hhid)))
+```
+```{r}
+# Compter le nombre de niveaux distincts dans hhid
+nb_of_hh <- sub_data %>%
+  distinct(hhid) %>%
+  count()
+
+print(nb_of_hh)
+```
+Il y a 30 familles d'au moins une personne.
+
+On exporte les donnees
+```{r}
+write.csv(sub_data, "microbetrace_data.csv")
+```
+
+
+# ------------------------------------------------------------------------------------------- 
+#     PLOT THE TREEE
+# ------------------------------------------------------------------------------------------- 
+
+# Plot the tree
+```{r setup, include=FALSE}
+# Tree from nextclade, exported from https://icytree.org/
+tree <- read.newick("D:/VERDI/Mathis/tree.newick")
+ggtree(tree)
+```
+
+
+# Import the annotation
+```{r}
+annotations <- read.csv("D:/VERDI/Mathis/microbetrace_data.csv")
+annotations <- annotations %>%
+    filter(hhid %in% 1:10)
+
+ggtree(tree) +
+  geom_tippoint(data = annotations,
+                mapping = aes(color = factor(hhid)),
+                size = 3) +
+  scale_color_manual(values = rainbow(10))  # Use 10 distinct colors
+```
+
+It is not working with newick tree (no nodes)
+So we try with the tree made with iqtree (see scripts)
+
+
+# Plot the tree made with IQTREE
+```{r}
+iq_tree <- read.tree("D:/VERDI/Mathis/iqtree/output.treefile")
+ggtree(iq_tree)
+
+annotations <- read.csv("D:/VERDI/Mathis/microbetrace_data.csv")
+annotations <- annotations[ , -1]
+annotations <- annotations %>%
+        mutate(hhid=as.factor(hhid),
+               index=as.factor(index))
+#       filter(hhid %in% 1:10)
+#print(annotations)
+#print(summary(annotations))
+p <- ggtree(iq_tree) %<+% annotations
+
+p <-  p  + geom_tippoint(aes(shape=index, color=hhid)) +
+      theme(legend.position = "right") +
+      scale_shape_manual(values=c(16,4)) +
+      labs(
+        colour = "HouseHold",
+        shape = "Index")
+p <- p + guides(col = guide_legend(nrow = 8))
+p <- p + theme(
+  legend.background = element_rect(fill = "lightgrey", color = "black"),
+  legend.title = element_text(size = 10, face="bold"),
+  legend.text = element_text(size = 8)
+)
+
+print(p)
+```
+
+
+# ------------------------------------------------------------------------------------------- 
+#     GENETIC DISTANCE MATRIX
+# ------------------------------------------------------------------------------------------- 
+
+## Distance matrix based on the tree (patristic distance)
+```{r}
+library(ape)
+iq_tree <- read.tree("D:/VERDI/Mathis/iqtree/output.treefile")
+label <- iq_tree$tip.label
+patristic_matrix <- ape::cophenetic.phylo(iq_tree)
+
+# Set the margins to allow space for the legend outside the plot
+par(oma = c(2, 0, 0, 2), mar = c(5, 4, 4, 2))
+
+heatmap(patristic_matrix,
+        col = heat.colors(12), # Optional: specify a color palette
+        main = "Patristic Distance Heatmap")
+par(xpd = TRUE) # Allow plotting outside the plot region
+legend("right",
+       inset = c(-0.3, 0), # Adjust inset to move the legend outside# Position of the legend
+       legend = c("Low Distance", "Medium Distance", "High Distance"),
+       col = heat.colors(12)[c(1, 6, 12)], # Colors corresponding to the legend entries
+       lty = 1, lwd = 2,
+       title = "Distance")
+```
+
+# ----------------------------------
+# Dated Phylogeny
+# ---------------------------------
+
+Il faut d'abord enlever les 10 sequences qui ne sont pas a prendre en compte (demander a Flouk)
+```{r}
+library(seqinr)
+
+
+
+date_data <- epidemio_data %>%
+            filter(sampleid != "") %>% 
+            select(sampleid,day1_date) %>% 
+            rename( name = sampleid,
+                    date = day1_date) %>% 
+            # TreeTime  preferred formats are “%Y-%m-%d”
+            mutate( date = as.Date(date, format = "%d/%m/%Y"),
+                    date = format(date, "%Y/%m/%d"))
+sequences_to_keep <- date_data$name
+sequences <- seqinr::read.fasta("nextclade.aligned.fasta")
+sequences <- sequences[names(sequences) %in% sequences_to_keep]
+seqinr::write.fasta(sequences, names = names(sequences), file.out = "122_nextclade_aligned.fasta")
+
+
+write.csv(date_data, "treetime_data.csv", row.names = FALSE, quote = FALSE)
+
+test_df <- read.csv("treetime_data.csv")
+```
+
+
+We use IQTREE to compute a dated phylogeny (https://iqtree.github.io/doc/Dating)
+```{bash}
+
+cd /mnt/d/VERDI/Mathis
+# https://iqtree.github.io/doc/Dating
+iqtree -s 122_nextclade_aligned.fasta --date iqtree_data.txt -pre results/122_nextclade
+```
+
+
+We Use Transphylo to compute the transmission tree (https://xavierdidelot.github.io/TransPhylo/)
+We follow this tutorial (https://xavierdidelot.github.io/TransPhylo/articles/infer.html)
+```{r}
+#devtools::install_github('xavierdidelot/TransPhylo')
+library('TransPhylo')
+library(ape)
+library(ggtree)
+phy <- read.tree("D:/VERDI/Mathis/results/122_nextclade.timetree.nwk")
+ggtree(phy) +
+  scale_x_time() +
+  ggtitle("Phylogenetic Tree with Timeline")
+```
+
+
+```{r}
+# Because such a phylogeny is dated relatively and not absolutely, we also need to indicate when the last sample was taken, which is 2024/05/03
+# Date d'entrée
+ptree<-ptreeFromPhylo(phy, #as.Date("2024/05/03", format = "%Y/%m/%d")
+                          2024.32)
+w.shape=10
+w.scale=0.1
+dateT=as.Date("2024/06/01", format = "%Y/%m/%d")
+res<-inferTTree(ptree,mcmcIterations=1000,w.shape=w.shape,w.scale=w.scale,dateT=dateT)
+```
+
+
+Quelque chose ne marche pas, on y reviendra peut etre, mais pour l'instant on va faire le clustering et le seqtrack avec le package adegenet.
+
+# ----------------------------------
+# ADEGENET ()
+# ---------------------------------
+
+```{r}
+#install.packages("adegenet")
+library(adegenet)
+rna <- adegenet::fasta2DNAbin("122_nextclade_aligned.fasta")
+rna
+```
+
+```{r}
+D <- dist.dna(rna, model="N")
+hist(D, col="royalblue", nclass=30,
+  main="Distribution of pairwise genetic distances",
+  xlab="Number of differing nucleotides")
+```
+
+```{r}
+snps <- seg.sites(rna)
+head(snps)
+length(snps)
+plot(density(snps, bw=100), col="royalblue",
+  xlab="Nucleotide position", ylab="SNP density",
+  main="Location of the SNPs in the genome", lwd=2)
+points(snps, rep(0, length(snps)), pch="|", col="red")
+mtext(side=3, text="blue: density of SNPs red bars: actual SNP positions")
+```
+
+```{r}
+D.tn93 <- dist.dna(rna, model="TN93")
+tree<- nj(D.tn93)
+tree
+
+tree <- root(tree,1)
+tree <- ladderize(tree)
+plot(tree)
+```
+
+```{r}
+library(adegenet)
+clust <- gengraph(rna, computeAll = TRUE)
+final_clust <- gengraph(rna, cutoff = 15)
+plot(final_clust$graph)
+```
+
+```{r}
+plot(tree, tip.color=final_clust$col[final_clust$clust$membership])
+title("Neighbour-Joining tree (TN93 distances)")
+mtext(side=3, text="(rooted to first case)")
+legend("bottomleft", fill=final_clust$col, legend=paste("group",1:17), title="Cluster of cases")
+```
+Now, we try to compute the SeqTrack Method to infer the transmission tree
+
+```{r}
+distmat <- as.matrix(D)
+
+# Check for non-positive values in the distance matrix
+#non_positive_values <- which(distmat == 0, arr.ind = TRUE)
+#print(non_positive_values)
+
+date_data$date <- as.POSIXct(date_data$date)
+res <- seqTrack(distmat, x.names=date_data$name, x.dates=date_data$date)
+
+plot(res)
+g <- plot(res, main="SeqTrack reconstruction of the outbreak")
+mtext(side=3, text="red: no/few mutations; grey: many mutations")
+
+```
+
+
+# ------------------------------------
+# TREE CLUSTERING 
+# ------------------------------------
+
+# 122 NEXTCLADE TIMETREE
+
+```{r}
+library(ape)
+library(ggtree)
+library(dplyr)
+phy <- read.tree("D:/VERDI/Mathis/122_sample/dated_iqtree/122_nextclade.timetree.nwk")
+
+
+# Calculate the patristic distance matrix
+patristic_distances <- cophenetic.phylo(phy)
+# Extraire les distances uniques de la matrice
+distances <- patristic_distances[upper.tri(patristic_distances)]
+# Résumé statistique des distances
+summary(distances)
+# Visualiser la distribution des distances
+hist(distances, breaks = 30, col = "lightblue", main = "Patristic Distance Distribution (122 samples)")
+
+
+# --------- CLUSTERING -----------
+# Appliquer le clustering hiérarchique
+hc <- hclust(as.dist(patristic_distances), method = "average")
+
+# Définir les valeurs de cutoff
+cutoffs <- seq(0.0005, 0.0020, by=0.0001)
+
+# Initialiser un vecteur pour stocker le nombre de clusters
+num_clusters <- numeric(length(cutoffs))
+
+# Boucle sur les valeurs de cutoff
+for (i in 1:length(cutoffs)) {
+  cutoff <- cutoffs[i]
+  clusters <- cutree(hc, h=cutoff)
+  num_clusters[i] <- length(unique(clusters))
+}
+
+# Créer le diagramme de coude
+plot(cutoffs, num_clusters, type="b", pch=19, xlab="Cutoff", ylab="Number of clusters", main=" Patristic Distance Elbow Diagran")
+
+
+```
+
+
+```{r}
+# Définir un seuil de distance
+seuil_distance <- 0.0010  # Remplacez par votre seuil choisi
+
+# Couper l'arbre de clustering à la hauteur du seuil
+clusters <- cutree(hc, h = seuil_distance)
+
+# Afficher les clusters
+nb_clusters <- as.numeric(length(unique(clusters)))
+
+
+# Create the data for the plot
+df_clusters <- data.frame(sampleid = names(clusters), cluster = clusters)
+
+sub_data <- epidemio_data %>%
+            select(sampleid, hhid, index) %>%
+            filter(sampleid != "") %>% 
+            mutate(hhid = as.factor(hhid),
+                   index = as.factor(index))
+
+#interest_hh <- sub_data %>%
+#  group_by(hhid) %>%
+#  filter(any(index == 0)) %>%
+#  ungroup() %>%
+#  distinct(hhid) %>%
+#  pull() %>%
+#  as.numeric()
+
+
+#sub_data <- sub_data %>%
+#  mutate(hh_of_interest = ifelse(as.character(hhid) %in% as.character(interest_hh), as.character(hhid), "NI"),
+#         hh_of_interest = as.factor(hh_of_interest))
+
+network_data <- left_join(sub_data, df_clusters, by = "sampleid")
+
+
+
+hhtransmission <- network_data %>%
+  group_by(hhid, cluster) %>%
+  mutate(hh_infected = ifelse(any(index == 1) & any(index == 0), TRUE, FALSE)) %>%
+  ungroup()
+
+
+# Préparer les données : ne garder que les points avec hh_infected == TRUE
+annotation_data <- hhtransmission %>%
+  filter(hh_infected == TRUE) %>%
+  select(sampleid, hhid, index)
+
+# Vérifier que sampleid correspond aux labels de l’arbre
+# print(head(phy$tip.label))
+# print(head(annotation_data$sampleid))
+
+# Créer le plot
+p <- ggtree(phy) %<+% annotation_data +  # jointure sur sampleid
+  geom_tippoint(aes(color = as.factor(hhid), 
+                    shape = as.factor(index)), 
+                size = 3, na.rm = TRUE) +  # na.rm=TRUE pour cacher les points non infectés
+  scale_shape_manual(values = c("0" = 16, "1" = 8),na.translate = FALSE) +  # rond = 16, étoile = 8
+  scale_color_discrete(name = "HOUSEHOLD INDEX", na.translate = FALSE) +  # Supprimer NA dans la légende des couleurs
+  theme_tree2() +
+  guides(col = guide_legend(nrow = 8)) +
+  ggtitle(paste("IQ TREE + LSD PHYLOGENY (122 samples, cutoff", seuil_distance, ")"))
+
+print(p)
+print(paste("Pour un cutoff de ",seuil_distance, " il y a ", nb_clusters, "clusters"))
+
+```
+
+# TN93 CLUSTERING
+
+```{r}
+D.tn93 <- dist.dna(rna, model="TN93")
+tree<- nj(D.tn93)
+tree
+
+hist(D.tn93, breaks = 30, col = "lightblue", main = "TN93 Distance Distribution (122 samples)")
+
+#tree <- root(tree,1)
+#tree <- ladderize(tree)
+#plot(tree)
+
+# Effectuer le clustering hiérarchique
+hc.tn93 <- hclust(D.tn93)
+
+# Définir les valeurs de cutoff
+cutoffs <- seq(0.0001, 0.0020, by=0.0001)
+
+# Initialiser un vecteur pour stocker le nombre de clusters
+num_clusters <- numeric(length(cutoffs))
+
+# Boucle sur les valeurs de cutoff
+for (i in 1:length(cutoffs)) {
+  cutoff <- cutoffs[i]
+  clusters <- cutree(hc.tn93, h=cutoff)
+  num_clusters[i] <- length(unique(clusters))
+}
+
+# Créer le diagramme de coude
+plot(cutoffs, num_clusters, type="b", pch=19, xlab="Cutoff", ylab="Number of clusters", main="TN93 Elbow Diagram")
+
+```
+
+```{r}
+# Définir un seuil de distance
+seuil_distance <- 0.0005  # Remplacez par votre seuil choisi
+
+# Couper l'arbre de clustering à la hauteur du seuil
+clusters.tn93 <- cutree(hc.tn93, h = seuil_distance)
+
+# Afficher les clusters
+nb_clusters <- as.numeric(length(unique(clusters.tn93)))
+
+# Create the data for the plot
+df_clusters.tn93 <- data.frame(sampleid = names(clusters.tn93), cluster = clusters.tn93)
+
+sub_data <- epidemio_data %>%
+            select(sampleid, hhid, index) %>%
+            filter(sampleid != "") %>% 
+            mutate(hhid = as.factor(hhid),
+                   index = as.factor(index))
+
+#interest_hh <- sub_data %>%
+#  group_by(hhid) %>%
+#  filter(any(index == 0)) %>%
+#  ungroup() %>%
+#  distinct(hhid) %>%
+#  pull() %>%
+#  as.numeric()
+
+
+#sub_data <- sub_data %>%
+#  mutate(hh_of_interest = ifelse(as.character(hhid) %in% as.character(interest_hh), as.character(hhid), "NI"),
+#         hh_of_interest = as.factor(hh_of_interest))
+
+network_data.tn93 <- left_join(sub_data, df_clusters.tn93, by = "sampleid")
+
+
+hhtransmission.tn93 <- network_data.tn93 %>%
+  group_by(hhid, cluster) %>%
+  mutate(hh_infected = ifelse(any(index == 1) & any(index == 0), TRUE, FALSE)) %>%
+  ungroup()
+
+
+# Préparer les données : ne garder que les points avec hh_infected == TRUE
+annotation_data.tn93 <- hhtransmission.tn93 %>%
+  filter(hh_infected == TRUE) %>%
+  select(sampleid, hhid, index)
+
+# Vérifier que sampleid correspond aux labels de l’arbre
+# print(head(phy$tip.label))
+# print(head(annotation_data$sampleid))
+
+# Créer le plot
+p.tn93 <- ggtree(phy) %<+% annotation_data.tn93 +  # jointure sur sampleid
+  geom_tippoint(aes(color = as.factor(hhid), 
+                    shape = as.factor(index)), 
+                size = 3, na.rm = TRUE) +  # na.rm=TRUE pour cacher les points non infectés
+  scale_shape_manual(values = c("0" = 16, "1" = 8),na.translate = FALSE) +  # rond = 16, étoile = 8
+  scale_color_discrete(name = "HOUSEHOLD INDEX", na.translate = FALSE) +  # Supprimer NA dans la légende des couleurs
+  theme_tree2() +
+  guides(col = guide_legend(nrow = 8)) +
+  ggtitle(paste("TN93 clusters PHYLOGENY (122 samples, cutoff",seuil_distance,")"))
+
+print(p.tn93)
+
+print(paste("Pour un cutoff de ",seuil_distance, " il y a ", nb_clusters, "clusters"))
+
+```
+
+# Bayesian Clustering 
+
+```{r}
+library(ape)
+library(ggtree)
+library(dplyr)
+
+phy.bay <- read.tree("D:/VERDI/Mathis/beast_icytree.newick")
+phy.bay$tip.label <- gsub("\"", "", phy.bay$tip.label)
+
+# Calculate the patristic distance matrix
+patristic_distances.bay <- cophenetic.phylo(phy.bay)
+# Extraire les distances uniques de la matrice
+distances.bay <- patristic_distances.bay[upper.tri(patristic_distances.bay)]
+# Résumé statistique des distances
+summary(distances.bay)
+# Visualiser la distribution des distances
+hist(distances.bay, breaks = 30, col = "lightblue", main = " Patristic Distance Distribution of Bayesian Tree (122 samples)")
+
+
+# --------- CLUSTERING -----------
+# Appliquer le clustering hiérarchique
+hc.bay <- hclust(as.dist(patristic_distances.bay))
+
+# Définir les valeurs de cutoff
+cutoffs <- seq(0, 2, by=0.1)
+
+# Initialiser un vecteur pour stocker le nombre de clusters
+num_clusters <- numeric(length(cutoffs))
+
+# Boucle sur les valeurs de cutoff
+for (i in 1:length(cutoffs)) {
+  cutoff <- cutoffs[i]
+  clusters.bay <- cutree(hc.bay, h=cutoff)
+  num_clusters[i] <- length(unique(clusters.bay))
+}
+
+# Créer le diagramme de coude
+plot(cutoffs, num_clusters, type="b", pch=19, xlab="Cutoff", ylab="Number of clusters", main=" Bayesian Tree Elbow Diagran")
+```
+
+```{r}
+# Définir un seuil de distance
+seuil_distance <- 1  # Remplacez par votre seuil choisi
+
+# Couper l'arbre de clustering à la hauteur du seuil
+clusters.bay <- cutree(hc.bay, h = seuil_distance)
+
+# Afficher les clusters
+nb_clusters <- as.numeric(length(unique(clusters.bay)))
+
+
+bay_names <- gsub("\"", "", names(clusters.bay))
+# Create the data for the plot
+df_clusters.bay <- data.frame(sampleid = bay_names, cluster = clusters.bay)
+
+sub_data <- epidemio_data %>%
+            select(sampleid, hhid, index) %>%
+            filter(sampleid != "") %>% 
+            mutate(hhid = as.factor(hhid),
+                   index = as.factor(index))
+
+#interest_hh <- sub_data %>%
+#  group_by(hhid) %>%
+#  filter(any(index == 0)) %>%
+#  ungroup() %>%
+#  distinct(hhid) %>%
+#  pull() %>%
+#  as.numeric()
+
+
+#sub_data <- sub_data %>%
+#  mutate(hh_of_interest = ifelse(as.character(hhid) %in% as.character(interest_hh), as.character(hhid), "NI"),
+#         hh_of_interest = as.factor(hh_of_interest))
+
+network_data.bay <- left_join(sub_data, df_clusters.bay, by = "sampleid")
+
+
+hhtransmission.bay <- network_data.bay %>%
+  group_by(hhid, cluster) %>%
+  mutate(hh_infected = ifelse(any(index == 1) & any(index == 0), TRUE, FALSE)) %>%
+  ungroup()
+
+
+# Préparer les données : ne garder que les points avec hh_infected == TRUE
+annotation_data.bay <- hhtransmission.bay %>%
+  filter(hh_infected == TRUE) %>%
+  select(sampleid, hhid, index)
+
+# Vérifier que sampleid correspond aux labels de l’arbre
+# print(head(phy$tip.label))
+# print(head(annotation_data$sampleid))
+
+# Créer le plot
+p.bay <- ggtree(phy.bay) %<+% annotation_data.bay +  # jointure sur sampleid
+  geom_tippoint(aes(color = as.factor(hhid), 
+                    shape = as.factor(index)), 
+                size = 3, na.rm = TRUE) +  # na.rm=TRUE pour cacher les points non infectés
+  scale_shape_manual(values = c("0" = 16, "1" = 8),na.translate = FALSE) +  # rond = 16, étoile = 8
+  scale_color_discrete(name = "HOUSEHOLD INDEX", na.translate = FALSE) +  # Supprimer NA dans la légende des couleurs
+  theme_tree2() +
+  guides(col = guide_legend(nrow = 8)) +
+  ggtitle(paste("BAYESIAN PHYLOGENY (122 samples, cutoff",seuil_distance,")"))
+
+print(p.bay)
+
+print(paste("Pour un cutoff de ",seuil_distance, " il y a ", nb_clusters, "clusters"))
+
+```
+# IQ TREE + Timetree (122 samples)
+
+```{r}
+library(ape)
+library(ggtree)
+library(dplyr)
+phy.nex <- read.nexus("D:/VERDI/Mathis/122_sample/iqtree/2025-05-20_treetime/timetree.nexus")
+# Calculate the patristic distance matrix
+patristic_distances.nex <- cophenetic.phylo(phy.nex)
+# Extraire les distances uniques de la matrice
+distances.nex <- patristic_distances.nex[upper.tri(patristic_distances.nex)]
+# Résumé statistique des distances
+summary(distances.nex)
+# Visualiser la distribution des distances
+hist(distances.nex, breaks = 30, col = "lightblue", main = " Patristic Distance Distribution of IQTREE + TREETIME (122 samples)")
+
+
+# --------- CLUSTERING -----------
+# Appliquer le clustering hiérarchique
+hc.nex <- hclust(as.dist(patristic_distances.nex))
+
+# Définir les valeurs de cutoff
+cutoffs <- seq(0, 4, by=0.2)
+
+# Initialiser un vecteur pour stocker le nombre de clusters
+num_clusters <- numeric(length(cutoffs))
+
+# Boucle sur les valeurs de cutoff
+for (i in 1:length(cutoffs)) {
+  cutoff <- cutoffs[i]
+  clusters.nex <- cutree(hc.nex, h=cutoff)
+  num_clusters[i] <- length(unique(clusters.nex))
+}
+
+# Créer le diagramme de coude
+plot(cutoffs, num_clusters, type="b", pch=19, xlab="Cutoff", ylab="Number of clusters", main=" IQTREE + TREETIME Tree Elbow Diagram")
+```
+```{r}
+# Définir un seuil de distance
+seuil_distance <- 2.6  # Remplacez par votre seuil choisi
+
+# Couper l'arbre de clustering à la hauteur du seuil
+#clusters.nex <- cutree(hc.nex, h = seuil_distance)
+clusters.nex <- cutree(hc.nex, k = 33)
+# Afficher les clusters
+nb_clusters <- as.numeric(length(unique(clusters.nex)))
+
+
+# Create the data for the plot
+df_clusters.nex <- data.frame(sampleid = names(clusters.nex), cluster = clusters.nex)
+
+sub_data <- epidemio_data %>%
+            select(sampleid, hhid, index) %>%
+            filter(sampleid != "") %>% 
+            mutate(hhid = as.factor(hhid),
+                   index = as.factor(index))
+
+#interest_hh <- sub_data %>%
+#  group_by(hhid) %>%
+#  filter(any(index == 0)) %>%
+#  ungroup() %>%
+#  distinct(hhid) %>%
+#  pull() %>%
+#  as.numeric()
+
+
+#sub_data <- sub_data %>%
+#  mutate(hh_of_interest = ifelse(as.character(hhid) %in% as.character(interest_hh), as.character(hhid), "NI"),
+#         hh_of_interest = as.factor(hh_of_interest))
+
+network_data.nex <- left_join(sub_data, df_clusters.nex, by = "sampleid")
+
+
+hhtransmission.nex <- network_data.nex %>%
+  group_by(hhid, cluster) %>%
+  mutate(hh_infected = ifelse(any(index == 1) & any(index == 0), TRUE, FALSE)) %>%
+  ungroup()
+
+
+# Préparer les données : ne garder que les points avec hh_infected == TRUE
+annotation_data.nex <- hhtransmission.nex %>%
+  filter(hh_infected == TRUE) %>%
+  select(sampleid, hhid, index)
+
+# Vérifier que sampleid correspond aux labels de l’arbre
+# print(head(phy$tip.label))
+# print(head(annotation_data$sampleid))
+
+# Créer le plot
+p.nex <- ggtree(phy.nex) %<+% annotation_data.nex +  # jointure sur sampleid
+  geom_tippoint(aes(color = as.factor(hhid), 
+                    shape = as.factor(index)), 
+                size = 3, na.rm = TRUE) +  # na.rm=TRUE pour cacher les points non infectés
+  scale_shape_manual(values = c("0" = 16, "1" = 8),na.translate = FALSE) +  # rond = 16, étoile = 8
+  scale_color_discrete(name = "HOUSEHOLD INDEX", na.translate = FALSE) +  # Supprimer NA dans la légende des couleurs
+  theme_tree2() +
+  guides(col = guide_legend(nrow = 8)) +
+  ggtitle(paste("IQTREE + TREETIME (122 samples, ",nb_clusters," clusters)"))
+
+print(p.nex)
+
+print(paste("Pour un cutoff de ",seuil_distance, " il y a ", nb_clusters, "clusters"))
+```
+
+# ROOTED + BOOTSTRAP IQTREE
+```{r}
+library(ape)
+library(ggtree)
+library(dplyr)
+phy.nex <- read.nexus("D:/VERDI/Mathis/122_sample/bootstrap_iqtree/treetime/timetree.nexus")
+patristic_distances.nex <- cophenetic.phylo(phy.nex)
+hc.nex <- hclust(as.dist(patristic_distances.nex))
+# Extraire les distances uniques de la matrice
+distances.nex <- patristic_distances.nex[upper.tri(patristic_distances.nex)]
+# Résumé statistique des distances
+summary(distances.nex)
+# Visualiser la distribution des distances
+hist(distances.nex, breaks = 30, col = "lightblue", main = " Patristic Distance Distribution of IQTREE + TREETIME Bootstrap (122 samples)")
+# Définir un seuil de distance
+seuil_distance <- 0.8  # Remplacez par votre seuil choisi
+
+# Couper l'arbre de clustering à la hauteur du seuil
+clusters.nex <- cutree(hc.nex, h = seuil_distance)
+#clusters.nex <- cutree(hc.nex, k = 9)
+# Afficher les clusters
+nb_clusters <- as.numeric(length(unique(clusters.nex)))
+
+
+# Create the data for the plot
+df_clusters.nex <- data.frame(sampleid = names(clusters.nex), cluster = clusters.nex)
+
+sub_data <- epidemio_data %>%
+            select(sampleid, hhid, index) %>%
+            filter(sampleid != "") %>% 
+            mutate(hhid = as.factor(hhid),
+                   index = as.factor(index))
+
+#interest_hh <- sub_data %>%
+#  group_by(hhid) %>%
+#  filter(any(index == 0)) %>%
+#  ungroup() %>%
+#  distinct(hhid) %>%
+#  pull() %>%
+#  as.numeric()
+
+
+#sub_data <- sub_data %>%
+#  mutate(hh_of_interest = ifelse(as.character(hhid) %in% as.character(interest_hh), as.character(hhid), "NI"),
+#         hh_of_interest = as.factor(hh_of_interest))
+
+network_data.nex <- left_join(sub_data, df_clusters.nex, by = "sampleid")
+
+
+hhtransmission.nex <- network_data.nex %>%
+  group_by(hhid, cluster) %>%
+  mutate(hh_infected = ifelse(any(index == 1) & any(index == 0), TRUE, FALSE)) %>%
+  ungroup()
+
+
+# Préparer les données : ne garder que les points avec hh_infected == TRUE
+annotation_data.nex <- hhtransmission.nex %>%
+  filter(hh_infected == TRUE) %>%
+  select(sampleid, hhid, index)
+
+# Vérifier que sampleid correspond aux labels de l’arbre
+# print(head(phy$tip.label))
+# print(head(annotation_data$sampleid))
+
+# Créer le plot
+p.nex <- ggtree(phy.nex) %<+% annotation_data.nex +  # jointure sur sampleid
+  geom_tippoint(aes(color = as.factor(hhid), 
+                    shape = as.factor(index)), 
+                size = 3, na.rm = TRUE) +  # na.rm=TRUE pour cacher les points non infectés
+  scale_shape_manual(values = c("0" = 16, "1" = 8),na.translate = FALSE) +  # rond = 16, étoile = 8
+  scale_color_discrete(name = "HOUSEHOLD INDEX", na.translate = FALSE) +  # Supprimer NA dans la légende des couleurs
+  theme_tree2() +
+  guides(col = guide_legend(nrow = 8)) +
+  ggtitle(paste("IQTREE + TREETIME BOOTSTRAP (122 samples, ",nb_clusters," clusters)"))
+
+print(p.nex)
+
+print(paste("Pour un cutoff de ",seuil_distance, " il y a ", nb_clusters, "clusters"))
+```
+
+
+# FLOUK ANALYSIS
+```{r}
+library(ape)
+library(ggtree)
+library(dplyr)
+library(readxl)
+library(stringr)
+
+flouk_dt <- read_excel("sequences_data.xlsx")
+
+phy.nex <- read.nexus("D:/VERDI/Mathis/flouk_analysis/reroot_treetime/timetree.nexus")
+patristic_distances.nex <- cophenetic.phylo(phy.nex)
+hc.nex <- hclust(as.dist(patristic_distances.nex))
+# Extraire les distances uniques de la matrice
+distances.nex <- patristic_distances.nex[upper.tri(patristic_distances.nex)]
+# Résumé statistique des distances
+summary(distances.nex)
+# Visualiser la distribution des distances
+hist(distances.nex, breaks = 30, col = "lightblue", main = " Patristic Distance Distribution of IQTREE + TREETIME Bootstrap (122 samples)")
+# Définir un seuil de distance
+seuil_distance <- 1.5  # Remplacez par votre seuil choisi
+
+# Couper l'arbre de clustering à la hauteur du seuil
+clusters.nex <- cutree(hc.nex, h = seuil_distance)
+#clusters.nex <- cutree(hc.nex, k = 9)
+# Afficher les clusters
+nb_clusters <- as.numeric(length(unique(clusters.nex)))
+
+
+# Create the data for the plot
+df_clusters.nex <- data.frame(sampleid = names(clusters.nex), cluster = clusters.nex)
+
+sub_data <- flouk_dt %>%
+            rename(hhid = households,
+                   sampleid = strain,
+                   ) %>% 
+            mutate(hhid = str_extract(sampleid, "(?<=ht)\\d{3}"),
+                   memberid= str_extract(sampleid, "(?<=ht\\d{3})\\d{2}"),
+                   index = ifelse(memberid == "01", 1, 0)) %>% 
+            select(sampleid, hhid, , memberid, index) %>%
+            mutate(hhid = as.factor(hhid),
+                   index = as.factor(index))
+
+#interest_hh <- sub_data %>%
+#  group_by(hhid) %>%
+#  filter(any(index == 0)) %>%
+#  ungroup() %>%
+#  distinct(hhid) %>%
+#  pull() %>%
+#  as.numeric()
+
+
+#sub_data <- sub_data %>%
+#  mutate(hh_of_interest = ifelse(as.character(hhid) %in% as.character(interest_hh), as.character(hhid), "NI"),
+#         hh_of_interest = as.factor(hh_of_interest))
+
+network_data.nex <- left_join(sub_data, df_clusters.nex, by = "sampleid")
+
+
+hhtransmission.nex <- network_data.nex %>%
+  group_by(hhid, cluster) %>%
+  mutate(hh_infected = ifelse(any(index == 1) & any(index == 0), TRUE, FALSE)) %>%
+  ungroup()
+
+
+# Préparer les données : ne garder que les points avec hh_infected == TRUE
+annotation_data.nex <- hhtransmission.nex %>%
+  filter(hh_infected == TRUE) %>%
+  select(sampleid, hhid, index)
+
+# Vérifier que sampleid correspond aux labels de l’arbre
+# print(head(phy$tip.label))
+# print(head(annotation_data$sampleid))
+
+# Créer le plot
+p.nex <- ggtree(phy.nex) %<+% annotation_data.nex +  # jointure sur sampleid
+  geom_tippoint(aes(color = as.factor(hhid), 
+                    shape = as.factor(index)), 
+                size = 3, na.rm = TRUE) +  # na.rm=TRUE pour cacher les points non infectés
+  scale_shape_manual(values = c("0" = 16, "1" = 8),na.translate = FALSE) +  # rond = 16, étoile = 8
+  scale_color_discrete(name = "HOUSEHOLD INDEX", na.translate = FALSE) +  # Supprimer NA dans la légende des couleurs
+  theme_tree2() +
+  guides(col = guide_legend(nrow = 8)) +
+  ggtitle(paste("IQTREE + TREETIME BOOTSTRAP (122 samples, ",nb_clusters," clusters)"))
+
+print(p.nex)
+
+print(paste("Pour un cutoff de ",seuil_distance, " il y a ", nb_clusters, "clusters"))
+```
+
+
+# ----------------------------- NETWORK PLOT ----------------
+
+
+
+```{r}
+# Create the data for the plot
+df_clusters <- data.frame(sampleid = names(clusters), cluster = clusters)
+
+
+
+sub_data <- epidemio_data %>%
+            select(sampleid, hhid, index) %>%
+            filter(sampleid != "") %>% 
+            mutate(hhid = as.factor(hhid),
+                   index = as.factor(index))
+
+interest_hh <- sub_data %>%
+  group_by(hhid) %>%
+  filter(any(index == 0)) %>%
+  ungroup() %>%
+  distinct(hhid) %>%
+  pull() %>%
+  as.numeric()
+
+
+sub_data <- sub_data %>%
+  mutate(hh_of_interest = ifelse(as.character(hhid) %in% as.character(interest_hh), as.character(hhid), "NI"),
+         hh_of_interest = as.factor(hh_of_interest))
+
+network_data <- left_join(sub_data, df_clusters, by = "sampleid")
+
+
+
+
+```
+
+
+```{r}
+library(igraph)
+library(tidygraph)
+library(ggraph)
+library(dplyr)
+
+# Étape 1 : Matrice de distances déjà existante
+# (tu peux adapter ce nom à ta variable réelle)
+# Exemple : distance_matrix <- your_existing_matrix
+distance_matrix <- patristic_distances
+distance_matrix[distance_matrix < seuil_distance] <- NA  # seuil pour ignorer les liens faibles
+
+# Étape 2 : Créer le graphe pondéré
+g <- graph_from_adjacency_matrix(
+  distance_matrix,
+  mode = "undirected",
+  weighted = TRUE,
+  diag = FALSE
+)
+
+# Supprimer les liens avec poids NA
+g <- delete_edges(g, which(is.na(E(g)$weight)))
+
+# Étape 3 : Ajouter les métadonnées
+node_df <- data.frame(sampleid = V(g)$name)
+meta_df <- left_join(node_df, network_data, by = "sampleid")
+
+V(g)$hhid <- meta_df$hhid
+V(g)$index <- meta_df$index
+V(g)$hh_of_interest <- meta_df$hh_of_interest
+
+# Étape 4 : Transformer pour ggraph
+tg <- as_tbl_graph(g) %>%
+  activate(edges) %>%
+  mutate(
+    from_hh = .N()$hhid[from],
+    to_hh = .N()$hhid[to],
+    alpha = ifelse(from_hh == to_hh, 1, 0.2),
+    color = ifelse(from_hh == to_hh, "red", "#B6B6B6"),
+    dist = weight
+  )
+
+# Étape 5 : Visualisation
+ggraph(tg, layout = "fr", weights = dist) +
+  geom_edge_link(aes(edge_width = 1 / dist, alpha = alpha, colour = color)) +
+  scale_edge_color_identity() +
+  geom_node_point(aes(color = factor(hh_of_interest), shape = factor(index)), size = 5) +
+  scale_shape_manual(values = c("0" = 16, "1" = 8)) +  # rond vs étoile
+  #geom_node_text(aes(label = sampleid), size = 3, repel = TRUE) +
+  theme_void() +
+  theme(legend.position = "bottom") +
+  labs(title = "Réseau pondéré par distance", color = "HH d'intérêt", shape = "Index")
+
+
+```
+

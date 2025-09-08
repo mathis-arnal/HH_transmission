@@ -1,0 +1,226 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-05-23"
+---
+
+```{r}
+library('devtools')
+# ggplot version needs to be 3.4.4
+#install_version("ggplot2", version = "3.4.4", repos = "http://cran.us.r-project.org")
+
+library(dplyr)
+library(readr)
+library(stringr)
+library(lubridate)
+library(ape)
+```
+
+
+It seems like out of all the  bad sequences, they are all from mahidol.
+I will take my sequences, and filter the 10 to get the final 122.
+```{r}
+
+mathis_sequences <- read.FASTA("../../consensus_assembly/combined_consensus.fasta")
+#
+
+verdi_df <- data.frame(sampleid = names(mathis_sequences),
+                       lab_seq = ifelse(grepl("run1_sup$", names(mathis_sequences)),"MU", "CMU"))
+
+# We update the dates 
+name_mapping <- c(
+  "ht09301_240503_d1" = "ht09301_240115_d1",
+  "ht09601_240115_d1" = "ht09601_240503_d1",
+  "ht06602_230604_inf_run1_sup" = "ht06602_230609_inf_run1_sup"
+)
+verdi_df$sampleid <- ifelse(
+  verdi_df$sampleid %in% names(name_mapping),
+  name_mapping[verdi_df$sampleid],
+  verdi_df$sampleid)
+
+# We get rid of 11 sequences due to duplication, or bad coverage
+# Bad coverage (58 %)
+sequence_to_remove <- c("ht01001_220831_d1")
+# RNA test negative
+sequence_to_remove <- c(sequence_to_remove,"ht07401_230705_d1")
+# Duplicates of sequences between d1 and infect, we keep the infect
+sequence_to_remove <- c(sequence_to_remove, "ht00306_220805_d1", "ht01402_220913_d1",
+                        "ht02002_220929_d1", "ht08002_230922_d1", "ht08903_231217_d1" )
+
+# Get rid of the CMU duplicates in the sequences
+sequence_to_remove <- c(sequence_to_remove, "ht00301_220805_d1", "ht00302_220810_inf",
+                        "ht06301_230510_d1", "ht07002_230623_inf")
+
+
+# not_used_seq <- c("ht00301_220805_d1" , "ht00302_220810_inf" ,"ht00306_220805_d1",  "ht01001_220831_d1",  "ht01402_220913_d1","ht02002_220929_d1","ht06301_230510_d1","ht07002_230623_inf", "ht07401_230705_d1" , "ht08002_230922_d1", "ht08903_231217_d1")
+
+verdi_df <- verdi_df %>% 
+          mutate(used_in_phylogeny = ifelse(sampleid %in% sequence_to_remove, "NO", "YES"))
+
+
+# Extract the hhid, pid and index
+verdi_df <- verdi_df %>%
+  mutate(
+    pid = toupper(str_sub(sampleid, 1, 7)),
+    hhid = str_extract(sampleid, "(?<=ht)\\d+") %>% substr(1, 3),
+    index = ifelse(str_extract(sampleid, "(?<=ht)\\d+") %>% substr(5,5)=="1", 1,0))
+
+
+phylo_df <- verdi_df %>%
+  subset(used_in_phylogeny == "YES")
+          
+write.csv(verdi_df, "../datasets/verdi_seq_df.csv")
+rm(verdi_df)
+
+treetime_data <- phylo_df %>% 
+  mutate(
+    # Extraire la date
+    date_str = str_extract(sampleid, "\\d{6}"),
+    # Convertir la date en format Date
+    date = as.Date(date_str, format = "%y%m%d")) %>% 
+  rename(name = sampleid) %>% 
+  select(name, date)
+
+ref_data <- data.frame(name = "NC_045512.2", date = as.Date("2019-12-26"))
+treetime_data <- rbind(treetime_data, ref_data)
+
+# Write the treetime data 
+write.csv(treetime_data, "../datasets/treetime_data.csv", quote = FALSE, row.names = FALSE)
+rm(treetime_data)
+
+# Create BEAST data
+beast_data <- phylo_df %>%
+  mutate(
+    # Extract the date
+    date_str = str_extract(sampleid, "\\d{6}"),
+    # Convert into date format
+    date = as.Date(date_str, format = "%y%m%d"),
+    # Compute the date of the year
+    day_of_year = yday(date),
+    year = year(date),
+    # Créer le format numérique souhaité
+    date = year + day_of_year / 365
+  ) %>% 
+  rename(name = sampleid) %>%
+  select(name, date)
+
+# We add the ref with numerical date
+ref_data <- data.frame(name = "NC_045512.2", date = 2019.986)
+beast_data <- rbind(ref_data, beast_data)
+
+
+write.table(beast_data, file = "../datasets/beast_data.txt", sep = "\t",
+            row.names = FALSE, col.names = FALSE, quote = FALSE)
+
+write.table(beast_data, file = "../datasets/iqtree_data.txt", sep = "\t",
+            row.names = FALSE, col.names = TRUE, quote = FALSE)
+
+```
+
+
+# Sequence removal( We comment the code that is outdated)
+```{r}
+
+mathis_sequences <- read.FASTA("D:/VERDI/Mathis/132_sample/combined_consensus.fasta")
+
+
+# Remove all the undesired sequences
+filtered_sequences <- mathis_sequences[!(names(mathis_sequences) %in% sequence_to_remove)]
+
+# Update the date of the samples
+name_mapping <- c(
+  "ht09301_240503_d1" = "ht09301_240115_d1",
+  "ht09601_240115_d1" = "ht09601_240503_d1",
+  "ht06602_230604_inf_run1_sup" = "ht06602_230609_inf_run1_sup"
+)
+names(filtered_sequences) <- ifelse(
+  names(filtered_sequences) %in% names(name_mapping),
+  name_mapping[names(filtered_sequences)],
+  names(filtered_sequences)
+)
+# Add the change 
+# write.FASTA(filtered_sequences, file = "D:/VERDI/Mathis/final_seq/final_seq.fasta")
+write.FASTA(filtered_sequences, file = "../reads/phylo_seq.fasta")
+
+```
+
+```{bash}
+cd ../reads/
+#mafft --auto final_seq.fasta > aligned_final_seq.fasta
+mafft --auto --addfragments verdi_seq.fasta ../ref/MN908947.3.fasta > aligned_verdi_seq.fasta
+```
+
+# Mask Positions (https://virological.org/t/issues-with-sars-cov-2-sequencing-data/473)
+```{r}
+library(seqinr)
+final_seq <- read.fasta("../reads/aligned_phylo_seq.fasta", as.string = FALSE, seqtype = "DNA")
+
+# Define homoplasic positions to mask
+homoplasic_positions <- c(187, 1059, 2094, 3037, 3130, 6990, 8022, 10323, 10741, 11074, 13408, 14786, 19684, 20148, 21137, 24034, 24378, 25563, 26144, 26461, 26681, 28077, 28826, 28854, 29700)
+
+mask_extremities_and_homoplasies <- function(seq,
+                                             start1 = 1, end1 = 55,
+                                             start2 = 29804, end2 = 29903,
+                                             homoplasic_positions = NULL) {
+  seq <- as.character(seq)
+  
+  # Masquer extrémités
+  seq[start1:end1] <- "n"
+  seq[start2:end2] <- "n"
+  
+  # Masquer positions homoplasiques si elles existent dans la séquence
+  valid_pos <- homoplasic_positions[homoplasic_positions <= length(seq)]
+  seq[valid_pos] <- "n"
+  
+  return(seq)
+}
+
+
+# Mask HOMOPLASIC SITES 
+
+
+# Apply masking
+masked_alignment <- lapply(
+  final_seq,
+  mask_extremities_and_homoplasies,
+  homoplasic_positions = homoplasic_positions
+)
+
+write.fasta(
+  sequences = masked_alignment,
+  names = names(final_seq),
+  file.out = "../reads/masked_aligned_phylo_seq.fasta"
+)
+
+```
+
+The sequences are now aligned and filtered, ready to be analysed.
+
+# GISAID sequences
+
+```{r}
+
+gisaid_seq <- read.FASTA("../reads/nothern_seq_gisaid.fa")
+verdi_seq <- read.FASTA("../reads/phylo_seq.fasta")
+ref_seq <- read.FASTA("../ref/NC_045512.2.fasta")
+verdiGISAID_seq <- c(verdi_seq, gisaid_seq)
+write.FASTA(verdiGISAID_seq,
+            file= "../reads/verdiGISAID_seq.fasta")
+
+# Prepare the time data 
+gisaid_df <- read_tsv("../datasets/gisaid.tsv")
+gisaid_df <- gisaid_df %>% 
+  mutate(    # Compute the date of the year
+    day_of_year = yday(date),
+    year = year(date),
+    # Créer le format numérique souhaité
+    date = year + day_of_year / 365) %>%
+  select(strain, date) %>%
+  rename(name = strain)
+
+iqtree_df<-read.table("../datasets/iqtree_data.txt", header = TRUE)
+
+verdiGISAIDref_df <- rbind(iqtree_df, gisaid_df)
+write.table(verdiGISAID_df, "../datasets/verdiGISAIDref_df.txt",sep = " ",
+            quote = FALSE, row.names = FALSE, col.names = FALSE)
+```

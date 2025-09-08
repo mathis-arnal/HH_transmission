@@ -1,0 +1,35 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+## Patumrat data
+
+```{r}
+patumrat_data <- read.csv("../analysis/IQtree_LSD/data/dataset_freezed28Jul25.csv")
+
+
+```
+
+```{r}
+library(dplyr)
+
+patumrat_data <- patumrat_data %>%
+  select(-starts_with("formatted"), -starts_with("othermem"))
+
+# We look at the NA, and get rid of 10 columns
+sort(colSums(is.na(patumrat_data)), decreasing = TRUE)
+patumrat_data <- patumrat_data[, colSums(is.na(patumrat_data)) <= 285]
+
+
+
+```
+
+## Prepare data for Component Analysis
+
+```{r}
+quest_var <- c("enrol_n","exclude_mem", "symptom_ind", "sex_ind","edu_ind","underhighschool","edu2","ttvac_ind","typevac_ind","lstvac_ind","underhighschool_ind","sharebedroomnum","sepbed","septoilet","mask_ind", "mask_mem","eversmoking","infection","infectionHouse","infection2","relatetoindex","goout2week","period_vac_group")
+
+c("ngene_ind"  ,"sgene_ind",)
+```

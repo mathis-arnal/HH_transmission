@@ -1,0 +1,64 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+#| echo: false
+library(readr)
+lineage_report <- read_csv("../analysis/IQtree_LSD/lineage_report.csv")
+date_df <- read_csv("../datasets/treetime_data.csv")
+date_df <- date_df %>% 
+  filter(name != "NC_045512.2")
+
+```
+
+You can add options to executable code like this
+
+```{r}
+library(dplyr)
+final_df <- dplyr::inner_join(lineage_report, date_df, by = c("taxon" = "name"))
+
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+
+# Convert date column to Date type if needed
+final_df$date <- as.Date(final_df$date)
+
+final_df$scorpio_call <- as.factor(final_df$scorpio_call)
+str(final_df)
+# Optionally group by month or week (to smooth the plot)
+final_df <- final_df %>%
+  mutate(month = floor_date(date, "month"),
+         month = format(month, "%Y-%m"))
+
+# Count occurrences of each lineage per month
+lineage_counts <- final_df %>%
+  group_by(month, scorpio_call) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(month) %>%
+  mutate(freq = count / sum(count))
+
+lineage_counts <- lineage_counts %>%
+   mutate(month = ym(month))  # Converts "2022-08" → 2022-08-01 (Date class)
+
+# Plot frequencies over time
+ggplot(lineage_counts, aes(x=month, y=freq, fill=scorpio_call)) + 
+    geom_area(position = "fill",alpha=0.6 , size=1, colour="black")
+
+```

@@ -1,0 +1,1194 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+# Context
+
+Coming back to ruling linkage out, what is the threshold at which there are “enough” mutations separating sequences that you can consider them to be unlinked? Like many things, the answer is “it depends”. And it depends on both the evolutionary rate of your pathogen of interest, and the average length of the serial interval between two cases in a direct infection. Given that both these variables have distributions, it is best to think about sequence divergence and case linkage probabilistically. In the figures below, we show probability distributions for whether cases are directly-linked given that their consensus genome sequences are separated by *x* mutations
+
+**"How can I assess whether two sequences are linked (e.g. by household transmission) *without* using a fixed mutation threshold?"**
+
+# Transphylo
+
+Transphylo is a tool used to infer transmission trees out of phylogenetic trees.
+
+See the presentation here: <https://www.youtube.com/watch?v=i5h_TX86kac>
+
+Generation time: 6.84 days (95% credible intervals, CrI, 5.72-8.60) <https://pubmed.ncbi.nlm.nih.gov/35791373/>
+
+( Generation time definition : <https://plus.maths.org/content/what-generation-time-disease> )
+
+Sampling time: The distribution of interval between infection and sampling of a case
+
+(
+
+```{r}
+library(ape)
+library(TransPhylo)
+set.seed(123)
+# Date at wich sampling ended
+dateT=2024.34
+# Import the tree
+tree <- read_and_prune_tree("../analysis/IQtree_LSD/verdiGISAID/treetime/nwk_timetree.newick",sample_ids = phylo_df$sampleid, type = "Newick")
+
+tree <- multi2di(tree) # remove multifurcations
+tree$edge.length <- pmax(tree$edge.length,1/365)  # use a day as minimum branch length
+p= ptreeFromPhylo (tree,dateLastSample = dateT)
+ptree <- p$ptree
+
+r_day= inferTTree (p,w.mean =6.84,w.std = 2.16,dateT=2025,mcmcIterations=1e4,
+                   thinning=10)
+
+```
+
+```{r}
+
+plot(r)
+```
+
+Before exploring the results of the inference (see Basic Protocol [4](https://pmc.ncbi.nlm.nih.gov/articles/PMC7995038/#cpz160-prot-0004)), it is necessary to make sure that the MCMC achieved good convergence and mixing properties. A first indication of this is given by plotting the traces of the MCMC, and this is what is done in the third line of the script above, which generates Figure [6](https://pmc.ncbi.nlm.nih.gov/articles/PMC7995038/#cpz160-fig-0006). If the trace of each parameter looks like a caterpillar without any obvious upward or downward trend, as in Figure [6](https://pmc.ncbi.nlm.nih.gov/articles/PMC7995038/#cpz160-fig-0006), it suggests that the MCMC has converged and mixed successfully. Otherwise, it may be necessary to increase the length of the MCMC.
+
+### Exploring the results of the inference
+
+```{r}
+install.packages ("coda")
+library (coda)
+print(r)
+```
+
+We note that the inferred values for these three parameters are close to the correct values used in the simulations 
+
+### Exploring the inferred transmission tree
+
+```{r}
+med= medTTree (r)
+# We extract only the hhid and number
+med$nam <- sub(".*?(\\d{3}).*", "\\1", med$nam)
+
+
+plot (med)
+plot ( extractTTree (med),type='detailed',w.shape=21.66,w.scale=0.3158)
+```
+
+#### Matrix of transmission probabilities between cases
+
+```{r}
+library (lattice)
+
+matWIW= computeMatWIW (r)
+levelplot (matWIW)
+write.csv(matWIW, "../analysis/IQtree_LSD/verdiGISAID/treetime/transphylo/clock_1.5e-3/prob_trans_matrix.csv")
+
+
+matTDist= computeMatTDist (r)
+levelplot (matTDist)
+write.csv(matTDist, "../analysis/IQtree_LSD/verdiGISAID/treetime/transphylo/clock_1.5e-3/dist_trans_matrix.csv")
+```
+
+Explore this matrix
+
+```{r}
+matWIW <- read.csv("../analysis/IQtree_LSD/verdiGISAID/treetime/transphylo/clock_1.5e-3/prob_trans_matrix.csv", row.names = 1)
+prob_threshold <- 0.95
+high_prob_indices <- which(matWIW > prob_threshold, arr.ind = TRUE)
+
+# Get the names of the rows and columns where the probability is > prob_threshold
+high_prob_names <- data.frame(
+  Row = rownames(matWIW)[high_prob_indices[, "row"]],
+  Column = colnames(matWIW)[high_prob_indices[, "col"]],
+  Value = matWIW[matWIW > prob_threshold]
+)
+
+high_prob_names$row_hhid <- str_extract(high_prob_names$Row, "(?<=ht)\\d{3}")
+high_prob_names$col_hhid <- str_extract(high_prob_names$Column, "(?<=ht)\\d{3}")
+
+hh_transmission_1.5e3 <- high_prob_names %>% 
+  filter(col_hhid == row_hhid)
+
+# Print the names
+str(high_prob_names)
+
+
+```
+
+21 HH for p\>0.8:
+
+"005" "009" "012" "024" "026" "027" "033" "035" "047" "051" "061" "066" "069" "070" "079" "080" "081" "082" "083" "084" "089"
+
+19 HH for p\>0.95 :
+
+```         
+005" "009" "024" "026" "027" "033" "047" "051" "061" "066" "069" "070" "079" "080" "081" "082" "083" "084" "089"
+```
+
+```{r}
+getIncidentCases (r,show.plot = T)
+
+getGenerationTimeDist (r,show.plot = T,maxi=4)
+
+getSamplingTimeDist (r,show.plot = T,maxi=4)
+```
+
+Number of cases in the transmission tree (**A**), realized generation time distribution (**B**), and realized sampling time distribution (**C**).
+
+When there is considerable uncertainty about these parameters and/or the phylogeny, sensitivity analysis can be used to test the robustness of the transmission analysis results 
+
+# Sensitivity analysis evolutionary rate of 1e-3
+
+## Let's create a function to analyze res
+
+```{r}
+get_hhtrans_prob <- function(matWIW, prob_threshold) {
+  high_prob_indices <- which(matWIW > prob_threshold, arr.ind = TRUE)
+  
+  # Get the names of the rows and columns where the probability is > prob_threshold
+  high_prob_names <- data.frame(
+    Row = rownames(matWIW)[high_prob_indices[, "row"]],
+    Column = colnames(matWIW)[high_prob_indices[, "col"]],
+    Value = matWIW[matWIW > prob_threshold]
+  )
+  
+  high_prob_names$row_hhid <- str_extract(high_prob_names$Row, "(?<=ht)\\d{3}")
+  high_prob_names$col_hhid <- str_extract(high_prob_names$Column, "(?<=ht)\\d{3}")
+  
+  hh_transmission <- high_prob_names %>% 
+    dplyr::filter(col_hhid == row_hhid)
+  
+  return(hh_transmission)
+}
+  
+
+```
+
+## Infer the transmission tree and compute the probability matrix
+
+```{r}
+library (lattice)
+library(stringr)
+
+source("analysis_fcts.R")
+library(TransPhylo)
+set.seed(123)
+# Date at wich sampling ended
+dateT=2024.34
+# Generation time distribution
+w.mean = 6.84
+w.std = 0.73
+
+# Import the dataset
+verdi_df <- read.csv("../datasets/verdi_seq_df.csv")
+phylo_df <- verdi_df %>% filter(used_in_phylogeny == "YES")
+# Import the tree
+tree <- read_and_prune_tree("../analysis/IQtree_LSD/verdiGISAID/molecular_clock_analysis/tt_stddev_0.0005/timetree.nexus",sample_ids = phylo_df$sampleid, type = "Nexus")
+
+tree <- multi2di(tree) # remove multifurcations
+tree$edge.length <- pmax(tree$edge.length,1/365)  # use a day as minimum branch length
+p= ptreeFromPhylo (tree,dateLastSample = dateT)
+ptree <- p$ptree
+
+r= inferTTree (p,
+               w.mean = w.mean,
+               w.std = w.std,
+               dateT=2025,
+               mcmcIterations=1e5,
+               thinning=10)
+
+matWIW= computeMatWIW (r)
+levelplot (matWIW)
+write.csv(matWIW, "../analysis/IQtree_LSD/verdiGISAID/treetime/transphylo/clock_1e-3/prob_trans_matrix.csv")
+
+
+matTDist= computeMatTDist (r)
+levelplot (matTDist)
+write.csv(matTDist, "../analysis/IQtree_LSD/verdiGISAID/treetime/transphylo/clock_1e-3/dist_trans_matrix.csv")
+```
+
+## Let's compare the results between with the evolutionary rate of 1.5e-3
+
+```{r}
+library(dplyr)
+matWIW_1e3 <-read.csv("../analysis/IQtree_LSD/verdiGISAID/treetime/transphylo/clock_1e-3/prob_trans_matrix.csv", row.names = 1)  
+
+hh_transmission_1e3_0.95 <- get_hhtrans_prob(matWIW_1e3, 0.95)
+
+matWIW_1.5e3 <-read.csv("../analysis/IQtree_LSD/verdiGISAID/treetime/transphylo/clock_1.5e-3/prob_trans_matrix.csv", row.names = 1)  
+
+hh_transmission_1.5e3_0.95 <- get_hhtrans_prob(matWIW_1.5e3, 0.95) 
+```
+
+With the evolutionary rate of 1e-3, we have results that are more similar towards the previous results with a strict threshold of 15 days.
+
+```{r}
+library(stringr)
+hh_transmission_1e3_0.95 <- hh_transmission_1e3_0.95 %>% 
+  mutate(
+    extracted_row = str_sub(Row, start = 6, end = 7),
+    extracted_col = str_sub(Column, start = 6, end = 7),
+    # Create the new variable 'row_index' based on the condition
+    row_index = if_else(extracted_row == "01", 1, 0, missing = 0),
+    col_index = if_else(extracted_col == "01", 1, 0, missing = 0),
+    # create the hh_transmission varaible
+    hhtrans_mem =  row_index != col_index
+  ) %>% 
+  select(-c(extracted_row,extracted_col)) %>% 
+  filter(hhtrans_mem)
+
+# We now extract the hh transmission
+
+mem_inf_row <- hh_transmission_1e3_0.95 %>%
+  filter(row_index == 0) %>%
+  pull(Row)
+
+mem_inf_col <- hh_transmission_1e3_0.95 %>%
+  filter(col_index == 0) %>%
+  pull(Column)
+  
+mem_inf <- c(mem_inf_row,mem_inf_col)
+mem_inf_prob <- str_sub(mem_inf, end=7)
+print(mem_inf)
+```
+
+Let's compare it with the previous results with a strict threshold of 15 days. (present in more than 95 percent of bootstraps)
+
+```{r}
+mem_inf_treshold <- as.character(d15_hhtransmission$sampleid)
+
+# Find elements present in Transphylo but not Treetime
+only_in_prob <- setdiff(mem_inf_prob, mem_inf_treshold)
+
+# Find elements present in Treetime but not in Transphylo
+only_in_tresh <- setdiff(mem_inf_treshold, mem_inf_prob)
+
+# Find elements common to both lists
+common_to_both <- intersect(mem_inf_prob, mem_inf_treshold)
+```
+
+16 HHtransmission are common to both :
+
+```         
+"ht06902" "ht02603" "ht02703" "ht01203" "ht00902" "ht08902" "ht08303" "ht07002" "ht08202" "ht08002" "ht06602" "ht08102" "ht06303" "ht07902" "ht03502" "ht05103"
+```
+
+5 HHtransmission are only in prob :
+
+```         
+"ht02404" "ht02704" "ht08903" "ht08302" "ht06302"
+```
+
+ht02404,ht02704 and ht08903 are almost considered at the 15d threshold.
+
+ht08302 appears only at the 60d threshold ( Surely Misslabeling)
+
+ht06302 appears around 30day ( Might have been contaminated by the other household, hence there is 9 days separating the two cases).
+
+5 HHtransmission are only in the strict threshold:
+
+```         
+"ht00302" "ht00306" "ht02304" "ht04403" "ht06903"
+```
+
+ht00302 and ht00306 might be a bit apart, and thus are not considered as HH transmission, but they look very alike.
+
+Maybe ht00301 and ht00302 got infected at the same time, but got sample 3 days apart.
+
+ht02304 looks like a HH transmission on the phylo tree ( close to the index value). Here the distance might seem to little for Transphylo to interpret it as transmission (15 % chances). He might have been infected when we arrived, hence the short time period between the two. (Or they could have caught it at the same time).
+
+ht04403 has 66% chances of transmission with these parameters. ( lower than the 95 CI), but looks great on the tree.
+
+ht06903 : According to Transphylo, it was transmitted from ht06902, so still a household transmission.
+
+Thus the final list of houshold transmission is:
+
+```{r}
+High_confidence_trans <- c("ht06902","ht02603","ht02703","ht01203","ht00902","ht08902","ht08303","ht07002", "ht08202","ht08002","ht06602","ht08102","ht06303","ht07902","ht03502","ht05103", "ht02404", "ht04403")
+medium_confidence_trans <- c("ht06903", "ht02304", "ht02704", "ht08903")
+to_discuss <- c("ht00302", "ht00306", "ht08302", "ht06302")
+```
+
+26 possible HH transmissions.
+
+Let's compare this result with the one from Flouk.
+
+```{r}
+library(readxl)
+flook_trans <- read_excel("D:/VERDI/FINAL_DATA/metadata/res/VERDI_dataset_250522_endformatted (1).xlsx") %>% 
+   filter(hhtrans_mem == "Household transmission") %>% 
+    pull(pid)
+
+flook_trans <- tolower(flook_trans)
+
+union_trans <- union(mem_inf_treshold, mem_inf_prob)
+
+
+all_ids <- unique(c(flook_trans, mem_inf_treshold, mem_inf_treshold_30d, mem_inf_prob, union_trans))
+
+binary_matrix <- data.frame(
+  ID = all_ids,
+  Expert = as.integer(all_ids %in% flook_trans),
+  Threshold_15D = as.integer(all_ids %in% mem_inf_treshold),
+  Threshold_30D = as.integer(all_ids %in% mem_inf_treshold_30d),
+  Bayesian = as.integer(all_ids %in% mem_inf_prob),
+  Union = as.integer(all_ids %in% union_trans)
+)
+
+# Put IDs as rownames
+rownames(binary_matrix) <- binary_matrix$ID
+binary_matrix$ID <- NULL
+
+library(reshape2)
+library(ggplot2)
+
+binary_long <- melt(as.matrix(binary_matrix))
+colnames(binary_long) <- c("ID", "Method", "Presence")
+
+ggplot(binary_long, aes(x = Method, y = ID, fill = factor(Presence))) +
+  geom_tile(color = "grey80") +
+  scale_fill_manual(values = c("0" = "white", "1" = "red")) +
+  labs(title = "HH Tranmission Method Comparison", fill = "Presence") +
+  theme_minimal()
+
+```
+
+ht00305 is clearly out and alone of the household 003 cluster.
+
+ht011 households is like this because treetime is creating fully bifurcating trees ( opposite to keep polytomies), which created a huge distance between the households (see the treetime tree). The full ht011 household might have caught the virus at the same time in the community (see the iqtree).
+
+ht01402 is clearly out and alone.
+
+ht03703 is present in the 30 day threshold, have 7 days apart of sampling (hence could still be HHtrans), but are clustered with many other sequences **It could be integrated (?). (30% with bayesian prob)**
+
+ht 042 household, even if the sample time could is coherent with HH transmission, have sequences that are too different to be considered as hhtransmission. In addition to that, all the ht042 sequences are in a cluster with other sequences from the study, which mean that it was likely the virus circulating in Chiang Mai at that moment, and they caught it outside the house.
+
+ht 047 household, index sequence is far away from the 2 other sequences that got infected 2 days apart, hence they might have caught it from the community at the same time. (see fig)
+
+ht 059 household, sequence have 5 sampling dates apart, are closely related in IQtree with a bootstrap value of 100. I checked and the sample date are correct. It appears in 60 percent of the bootstraps, so we can assume that it is a possible **hh transmission aswell.**
+
+```{r}
+final_trans <- c(union_trans, "ht05903", "ht03703")
+
+all_ids <- unique(c(flook_trans, mem_inf_treshold, mem_inf_prob, union_trans, final_trans))
+
+binary_matrix <- data.frame(
+  ID = all_ids,
+  Expert = as.integer(all_ids %in% flook_trans),
+  Threshold = as.integer(all_ids %in% mem_inf_treshold),
+  Bayesian = as.integer(all_ids %in% mem_inf_prob),
+  Union = as.integer(all_ids %in% union_trans),
+  Final = as.integer(all_ids %in% final_trans)
+)
+
+# Put IDs as rownames
+rownames(binary_matrix) <- binary_matrix$ID
+binary_matrix$ID <- NULL
+
+library(reshape2)
+library(ggplot2)
+
+binary_long <- melt(as.matrix(binary_matrix))
+colnames(binary_long) <- c("ID", "Method", "Presence")
+
+ggplot(binary_long, aes(x = Method, y = ID, fill = factor(Presence))) +
+  geom_tile(color = "grey80") +
+  scale_fill_manual(values = c("0" = "white", "1" = "red")) +
+  labs(title = "HH Tranmission Method Comparison", fill = "Presence") +
+  theme_minimal()
+```
+
+28 HH transmission in the end.
+
+```{r}
+#mem_inf_prob_plus <- c(mem_inf_prob, "ht04403", "ht06903")
+union_trans <- union(mem_inf_treshold, mem_inf_prob_plus)
+
+all_ids <- unique(c(flook_trans, mem_inf_treshold, mem_inf_treshold_30d, mem_inf_prob_plus, mem_inf_prob, union_trans))
+
+binary_matrix <- data.frame(
+  ID = all_ids,
+  Expert = as.integer(all_ids %in% flook_trans),
+  Threshold_15D = as.integer(all_ids %in% mem_inf_treshold),
+  Threshold_30D = as.integer(all_ids %in% mem_inf_treshold_30d),
+  Bayesian = as.integer(all_ids %in% mem_inf_prob_plus),
+  Union = as.integer(all_ids %in% union_trans)
+)
+
+# Put IDs as rownames
+rownames(binary_matrix) <- binary_matrix$ID
+binary_matrix$ID <- NULL
+
+library(reshape2)
+library(ggplot2)
+
+binary_long <- melt(as.matrix(binary_matrix))
+colnames(binary_long) <- c("ID", "Method", "Presence")
+
+# Create a new column for special coloring
+binary_long$Special <- as.integer(binary_long$ID %in% mem_inf_treshold_30d & binary_long$Method == "Bayesian" & binary_long$Presence == "1" & !binary_long$ID %in% mem_inf_prob_plus)
+
+
+ggplot(binary_long, aes(x = Method, y = ID, fill = factor(Presence))) +
+  geom_tile(color = "grey80") +
+  scale_fill_manual(values = c("0" = "white", "1" = "red")) +
+  labs(title = "HH Tranmission Method Comparison", fill = "Presence") +
+  theme_minimal()
+```
+
+## Let's compare with the clock rate of 1e-3.
+
+```{r}
+# Find elements present in Transphylo but not Treetime
+only_in_prob <- setdiff(mem_inf_prob, mem_inf_treshold_1e3)
+
+# Find elements present in Treetime but not in Transphylo
+only_in_tresh <- setdiff(mem_inf_treshold_1e3, mem_inf_prob)
+
+# Find elements common to both lists
+common_to_both <- intersect(mem_inf_prob, mem_inf_treshold_1e3)
+```
+
+Now 17 HHtransmission are common to both : ht02404 is added
+
+# GO FURTHER
+
+### Adjust the sampling time
+
+Let's keep the evolutionary rate of 1e-3, that seems more plausible, and adjust the sampling time distribution.
+
+In the previous case, because we didn't specify ws.shape and ws.std, it is equal to w.mean and w.std.
+
+We keep the same generation time values: w.mean =6.84, w.std = 2.16.
+
+We specify the sampling time distribution as ws.shape = 4.1 and ws.std = 2.66.
+
+Indeed, according to this publication, <https://assets.publishing.service.gov.uk/media/650212f05b0738000d029e65/Incubation-period-serial-interval-and-infectious-period-for-the-Omicron-variant-of-SARS-CoV-a-rapid-evidence-briefing.pdf>,
+
+there is a mean incubation period of 3.1 days (standarddeviation \[SD\]: 2.6 days) for the Omicron variant.
+
+Then, we also know that we got the sample within 48 hours after ATK positive.
+
+1
+
+```{r}
+source("analysis_fcts.R")
+library(TransPhylo)
+set.seed(123)
+# Date at wich sampling ended
+dateT=2024.34
+# Generation time distribution
+w.mean = 6.84
+w.std = 2.16
+# Sampling time distribution
+ws.mean = 4.1
+ws.std = 2.66
+
+# Import the dataset
+verdi_df <- read.csv("../datasets/verdi_seq_df.csv")
+phylo_df <- verdi_df %>% filter(used_in_phylogeny == "YES")
+# Import the tree
+tree <- read_and_prune_tree("../analysis/IQtree_LSD/verdiGISAID/molecular_clock_analysis/tt_stddev_0.0005/timetree.nexus",sample_ids = phylo_df$sampleid, type = "Nexus")
+
+tree <- multi2di(tree) # remove multifurcations
+tree$edge.length <- pmax(tree$edge.length,1/365)  # use a day as minimum branch length
+p= ptreeFromPhylo (tree,dateLastSample = dateT)
+ptree <- p$ptree
+
+r= inferTTree (p,
+               w.mean = w.mean,
+               w.std = w.std,
+               ws.mean = ws.mean,
+               ws.std = ws.std,
+               dateT=2025,
+               mcmcIterations=1e5,
+               thinning=10)
+
+matWIW_st_1e3= computeMatWIW (r)
+hh_transmission_st_1e3_0.95 <- get_hhtrans_prob(matWIW_st_1e3, 0.95)
+```
+
+Si on modifie la sampling time distribution, on obtient que 2 transmission donc il y a un probleme dans cette modelisation. Je conseille de retourner au parametres de base, qui sont w.mean = ws.mean, et w.std = ws.std
+
+No result with ws.mean = 4.1 and ws.std = 1 HHtransmission
+
+ws.mean = 3.5 and ws.std = 1 HHtransmission
+
+ws.mean = 4.1 ws.std = 2.66 : 1 HHtransmission
+
+```{r}
+plot(r)
+print(r)
+mcmc= convertToCoda (r)
+effectiveSize (mcmc)
+```
+
+We can see that the Basic reproduction number R is not converging, so we can try to modify the priors related to R.
+
+Offspring number typically refers to the basic reproduction number (R0), which is a measure of how contagious an infectious disease is. Specifically, R0 represents the average number of secondary infections produced by a single infected individual in a completely susceptible population
+
+Let's try to modify some parameters:
+
+startOff.R: First parameter of the negative binomial distribution for offspring number
+
+startOff.p Second parameter of the negative binomial distribution for offspring number
+
+```{r}
+set.seed(123)
+# Date at wich sampling ended
+dateT=2024.34
+# Generation time distribution
+w.mean = 6.84
+w.std = 2.16
+# Sampling time distribution
+ws.mean = 4.1
+ws.std = 2.66
+
+r_2= inferTTree(p,
+               w.mean = w.mean,
+               w.std = w.std,
+               ws.mean = ws.mean,
+               ws.std = ws.std,
+               startOff.r = 3,
+               startOff.p = 0.5,
+               dateT=2025,
+               mcmcIterations=1e5,
+               thinning=10,
+               updateOff.r = TRUE)
+```
+
+```{r}
+plot(r_2)
+print(r_2)
+mcmc= convertToCoda (r_2)
+effectiveSize (mcmc)
+
+matWIW_st_1e3= computeMatWIW (r_2)
+hh_transmission_st_1e3_0.95 <- get_hhtrans_prob(matWIW_st_1e3, 0.40)
+```
+
+The Basic Reproduction Number is still not converging, so we need to increase the mcmc Iterations, and do 1e5 more.
+
+```{r}
+set.seed(123)
+# Date at wich sampling ended
+dateT=2024.34
+# Generation time distribution
+w.mean = 6.84
+w.std = 2.16
+# Sampling time distribution
+ws.mean = 4.1
+ws.std = 2.66
+
+# Extract the previous results 
+n <- length(r_2)
+last_pi<-r_2[[n]]$pi
+last_off.r<-r_2[[n]]$off.r
+last_off.p<-r_2[[n]]$off.p
+last_neg<-r_2[[n]]$neg
+
+r_3= inferTTree(p,
+               w.mean = w.mean,
+               w.std = w.std,
+               ws.mean = ws.mean,
+               ws.std = ws.std,
+               startOff.r = last_off.r,
+               startOff.p = last_off.p,
+               startPi = last_pi,
+               startNeg = last_neg,
+               dateT=2025,
+               mcmcIterations=1e5,
+               thinning=10,
+               updateOff.r = TRUE)
+```
+
+```{r}
+plot(r_3)
+print(r_2)
+mcmc= convertToCoda (r_2)
+effectiveSize (mcmc)
+
+matWIW_st_1e3= computeMatWIW (r_2)
+hh_transmission_st_1e3_0.95 <- get_hhtrans_prob(matWIW_st_1e3, 0.40)
+```
+
+R is still not converging ...
+
+## 
+
+## Generation Time Sensitivity analysis
+
+In a study, mean realized household generation time of 3.59 days (95%CrI: 3.55-3.60). Let's see in our results.
+
+We keep the sampling time distribution as ws.shape = 4.1 and ws.std = 2.66.
+
+```{r}
+library(TransPhylo)
+library(coda)
+
+set.seed(123)
+# Date at wich sampling ended
+dateT=2024.34
+#  Household Generation time distribution
+w.mean = 3.59 
+w.std = 0.5
+# Sampling time distribution
+ws.mean = 4.1
+ws.std = 2.66
+
+# Extract the previous results 
+
+r= inferTTree(p,
+               w.mean = w.mean,
+               w.std = w.std,
+               ws.mean = ws.mean,
+               ws.std = ws.std,
+               dateT=2025,
+               mcmcIterations=1e5,
+               thinning=10,
+               updateOff.r = TRUE)
+
+plot(r)
+print(r)
+mcmc= convertToCoda (r2)
+effectiveSize (mcmc)
+gen_time <- getGenerationTimeDist(r)
+matWIW_st_1e3_gen_time= computeMatWIW(r)
+hh_transmission_st_1e3_0.95_gen_time <- get_hhtrans_prob(matWIW_st_1e3_gen_time, 0.40)
+```
+
+Only ht08202 counted as hh_transmission,
+
+Let's try with the parameters from this paper :\
+"TransPhylo was executed with parameters that represented viral generation times within 1 to 14 days with a median of 5.5 days and sampling times of 2 to 14 days with a median of 7 days "\
+<https://www.researchgate.net/figure/Parameters-configuration-for-TransPhylo-transmission-tree-inference_tbl2_357078321>
+
+```{r}
+library(coda)
+# Date at wich sampling ended
+dateT=2024.34
+#  Household Generation time distribution
+w.shape = 1
+w.scale = 0.01917
+# Sampling time distribution
+ws.shape = 1
+ws.scale = 0.03836
+
+r= inferTTree(p,
+              w.shape = w.shape,
+              w.scale = w.scale,
+              ws.shape = ws.shape,
+              ws.scale = ws.scale,
+               dateT=2025,
+               mcmcIterations=1e4,
+               thinning=10,
+               updateOff.r = TRUE)
+
+plot(r)
+print(r)
+mcmc= convertToCoda(r)
+effectiveSize (mcmc)
+gen_time <- getGenerationTimeDist(r)
+matWIW_st_1e3_gen_time= computeMatWIW(r)
+
+
+library(stringr)
+hh_transmission_st_1e3_0.95_gen_time <- get_hhtrans_prob(matWIW_st_1e3_gen_time, 0.40)
+
+  high_prob_indices <- which(matWIW_st_1e3_gen_time > 0.50, arr.ind = TRUE)
+  
+  # Get the names of the rows and columns where the probability is > prob_threshold
+  high_prob_names <- data.frame(
+    Row = rownames(matWIW_st_1e3_gen_time)[high_prob_indices[, "row"]],
+    Column = colnames(matWIW_st_1e3_gen_time)[high_prob_indices[, "col"]],
+    Value = matWIW_st_1e3_gen_time[matWIW_st_1e3_gen_time > 0.50]
+  )
+  
+  high_prob_names$row_hhid <- str_extract(high_prob_names$Row, "(?<=ht)\\d{3}")
+  high_prob_names$col_hhid <- str_extract(high_prob_names$Column, "(?<=ht)\\d{3}")
+  
+  hh_transmission <- high_prob_names %>% 
+    dplyr::filter(row_hhid == col_hhid)
+
+```
+
+We have 11 cases, this is getting better.
+
+# Pararameters in fraction of years
+
+Now let"s try to use the first for the paper (<https://pubmed.ncbi.nlm.nih.gov/35791373/>), but divided in years, with the shape and scale.
+
+Let"s see the shape of the gamma distribution
+
+```{r}
+# Paramètres de la distribution
+shape <- 2.39     # ou k
+scale <- 0.00808     # ou θ
+
+# Séquence de valeurs sur l’axe des x
+x <- seq(0, 0.1, length.out = 500)
+
+# Densité gamma
+y <- dgamma(x, shape = shape, scale = scale)
+
+# Tracer la courbe
+plot(x, y, type = "l", lwd = 2, col = "blue",
+     main = paste("Generation Time Distribution\nshape =", shape, ", scale =", scale),
+     xlab = "Fraction of years", ylab = "Density")
+
+# Ajouter les lignes verticales en pointillé
+abline(v = 7/365,  col = "red", lty = 2, lwd = 2)
+abline(v = 15/365, col = "darkgreen", lty = 2, lwd = 2)
+abline(v = 30/365, col = "purple", lty = 2, lwd = 2)
+
+# Ajouter une légende
+legend("topright",
+       legend = c("7 days", "15 days", "30 days"),
+       col = c("red", "darkgreen", "purple"),
+       lty = 2, lwd = 2)
+```
+
+```{r}
+library(TransPhylo)
+# Date at wich sampling ended
+dateT=2024.34
+#  Household Generation time distribution
+w.shape = 2.39
+w.scale = 0.00808
+# We consider the Sampling time distribution equal to the sampling time distribution
+ws.shape = w.shape
+ws.scale = w.scale
+
+r= inferTTree(p,
+              w.shape = w.shape,
+              w.scale = w.scale,
+              ws.shape = ws.shape,
+              ws.scale = ws.scale,
+               dateT=2024.5,
+               mcmcIterations=1e5,
+               thinning=10,
+               updateOff.r = TRUE)
+
+plot(r)
+print(r)
+mcmc= convertToCoda(r)
+effectiveSize (mcmc)
+gen_time <- getGenerationTimeDist(r)
+matWIW_st_1e3_gen_time= computeMatWIW(r)
+write.csv(matWIW_st_1e3_gen_time, "../analysis/IQtree_LSD/verdiGISAID/treetime/transphylo/clock_1e-3/param_in_years/prob_trans_matrix.csv")
+
+```
+
+```{r}
+library(dplyr)
+hh_transmission_1e3_0.95_y <- get_hhtrans_prob(matWIW_st_1e3_gen_time, 0.50) 
+  
+library(stringr)
+
+hh_transmission_1e3_0.95 <- high_prob_names %>% 
+  mutate(
+    extracted_row = str_sub(Row, start = 6, end = 7),
+    extracted_col = str_sub(Column, start = 6, end = 7),
+    # Create the new variable 'row_index' based on the condition
+    row_index = if_else(extracted_row == "01", 1, 0, missing = 0),
+    col_index = if_else(extracted_col == "01", 1, 0, missing = 0),
+    # create the hh_transmission varaible
+    hhtrans_mem =  row_index != col_index
+  ) %>% 
+  select(-c(extracted_row,extracted_col)) %>% 
+  filter(hhtrans_mem)
+
+# We now extract the hh transmission
+
+mem_inf_row <- hh_transmission_1e3_0.95 %>%
+  filter(row_index == 0) %>%
+  pull(Row)
+
+mem_inf_col <- hh_transmission_1e3_0.95 %>%
+  filter(col_index == 0) %>%
+  pull(Column)
+  
+mem_inf <- c(mem_inf_row,mem_inf_col)
+mem_inf_prob <- str_sub(mem_inf, end=7)
+print(mem_inf)
+
+```
+
+We have 18 cases, now let's try with a sampling time.
+
+### What is the sampling time distribution ? Aka the prior of time between getting infected and getting sampled ?
+
+We first need the distribution of time from infection to positive test.
+
+Calcul de la distribution: Si on décompose :
+
+-   **Temps infection → ATK positif** : 4-6 jours en moyenne (d'après les références)
+
+-   **Temps ATK positif → échantillonnage** : 0-1 jour (selon votre protocole)
+
+**Donc : Temps infection → échantillonnage = 4-7 jours en moyenne**
+
+### Option :
+
+-   `ws.shape = 5`
+
+-   `ws.scale = 1/365 = 0.00274`
+
+-   **Moyenne** = 5 × 0.00274 = **0.0137 années** (≈ 5 jours)
+
+-   **Écart-type** = √(5) × 0.00274 = **0.0061 années** (≈ 2.2 jours)
+
+```{r}
+# Paramètres de la distribution
+shape <- 2.39   # ou k
+scale <- 0.006       # ou θ
+
+# Séquence de valeurs sur l’axe des x
+x <- seq(0, 0.1, length.out = 500)
+
+# Densité gamma
+y <- dgamma(x, shape = shape, scale = scale)
+
+# Tracer la courbe
+plot(x, y, type = "l", lwd = 2, col = "blue",
+     main = paste("Sampling Time Distribution\nshape =", shape, ", scale =", scale),
+     xlab = "Fraction of years", ylab = "Density")
+
+# Ajouter les lignes verticales en pointillé
+abline(v = 7/365,  col = "red", lty = 2, lwd = 2)
+abline(v = 15/365, col = "darkgreen", lty = 2, lwd = 2)
+abline(v = 30/365, col = "purple", lty = 2, lwd = 2)
+
+# Ajouter une légende
+legend("topright",
+       legend = c("7 days", "15 days", "30 days"),
+       col = c("red", "darkgreen", "purple"),
+       lty = 2, lwd = 2)
+```
+
+We also start startOff.r to 2 to represent more the Omicron variant.
+
+```{r}
+library(TransPhylo)
+library(stringr)
+library(coda)
+library(dplyr)
+# Date at wich sampling ended
+dateT=2024.34
+#  Household Generation time distribution
+w.shape = 2.39
+w.scale = 0.00808
+# We consider the Sampling time distribution a bit wider 
+ws.shape =  w.shape
+ws.scale = w.scale * 1.5 
+
+r_2= inferTTree(p,
+              w.shape = w.shape,
+              w.scale = w.scale,
+              ws.shape = ws.shape,
+              ws.scale = ws.scale,
+              dateT=2024.5,
+              mcmcIterations=1e4,
+              thinning=10,
+              startOff.r = 2,
+              updateOff.p = TRUE)
+
+plot(r_2)
+print(r_2)
+mcmc= convertToCoda(r_2)
+effectiveSize (mcmc)
+
+matWIW= computeMatWIW(r_2)
+prob_threshold = 0.5
+
+
+hh_transmission_1e3_0.95 <- get_hhtrans_prob(matWIW, prob_threshold = 0.50)
+
+hh_transmission_1e3_0.95 <- hh_transmission_1e3_0.95 %>% 
+  mutate(
+    extracted_row = str_sub(Row, start = 6, end = 7),
+    extracted_col = str_sub(Column, start = 6, end = 7),
+    # Create the new variable 'row_index' based on the condition
+    row_index = if_else(extracted_row == "01", 1, 0, missing = 0),
+    col_index = if_else(extracted_col == "01", 1, 0, missing = 0),
+    # create the hh_transmission varaible
+    index_to_mem_trans =  row_index != col_index,
+    mem_to_mem_trans = row_index == col_index
+  ) %>% 
+  dplyr::select(-c(extracted_row,extracted_col))
+
+# We now extract the hh transmission
+
+# By the index 
+
+index_to_mem_row <- hh_transmission_1e3_0.95 %>%
+  filter(index_to_mem_trans) %>% 
+  filter(row_index == 0) %>%
+  pull(Row)
+
+index_to_mem_col <- hh_transmission_1e3_0.95 %>%
+  filter(index_to_mem_trans) %>% 
+  filter(col_index == 0) %>%
+  pull(Column)
+
+# When member to member infection, extract only the member infected
+mem_to_mem_id <- hh_transmission_1e3_0.95 %>%
+  filter(mem_to_mem_trans) %>% 
+  pull(Column)
+  
+mem_inf <- c(index_to_mem_row,index_to_mem_col,mem_to_mem_id)
+mem_inf_prob <- str_sub(mem_inf, end=7)
+print(mem_inf)
+setdiff(mem_inf_prob, mem_inf_prob_plus)
+setdiff(mem_inf_prob_plus, mem_inf_prob)
+
+```
+
+```{r}
+#mem_inf_prob_plus <- c(mem_inf_prob, "ht04403", "ht06903")
+union_trans <- union(mem_inf_treshold, mem_inf_prob_plus)
+
+all_ids <- unique(c(flook_trans, mem_inf_treshold, mem_inf_treshold_30d, mem_inf_prob_plus, mem_inf_prob, union_trans))
+
+binary_matrix <- data.frame(
+  ID = all_ids,
+  Expert = as.integer(all_ids %in% flook_trans),
+  Threshold_15D = as.integer(all_ids %in% mem_inf_treshold),
+  Threshold_30D = as.integer(all_ids %in% mem_inf_treshold_30d),
+  Bayesian = as.integer(all_ids %in% mem_inf_prob_plus),
+  Bayesian_2 = as.integer(all_ids %in% mem_inf_prob)
+)
+
+# Put IDs as rownames
+rownames(binary_matrix) <- binary_matrix$ID
+binary_matrix$ID <- NULL
+
+library(reshape2)
+library(ggplot2)
+
+binary_long <- melt(as.matrix(binary_matrix))
+colnames(binary_long) <- c("ID", "Method", "Presence")
+
+# Create a new column for special coloring
+binary_long$Special <- as.integer(binary_long$ID %in% mem_inf_treshold_30d & binary_long$Method == "Bayesian" & binary_long$Presence == "1" & !binary_long$ID %in% mem_inf_prob_plus)
+
+
+ggplot(binary_long, aes(x = Method, y = ID, fill = factor(Presence))) +
+  geom_tile(color = "grey80") +
+  scale_fill_manual(values = c("0" = "white", "1" = "red")) +
+  labs(title = "HH Tranmission Method Comparison", fill = "Presence") +
+  theme_minimal()
+```
+
+```{r}
+library(TransPhylo)
+library(stringr)
+library(coda)
+library(dplyr)
+# Date at wich sampling ended
+dateT=2024.34
+#  Household Generation time distribution
+w.shape = 2.39
+w.scale = 0.00808
+# We consider the Sampling time distribution a bit wider 
+ws.shape =  w.shape
+ws.scale = w.scale * 1.5
+startOff.r = 2
+startNeg = 0.01
+startPi = 0.8
+
+
+r_2= inferTTree(p,
+              w.shape = w.shape,
+              w.scale = w.scale,
+              ws.shape = ws.shape,
+              ws.scale = ws.scale,
+              dateT=2024.5,
+              mcmcIterations=1e4,
+              thinning=10,
+              #startOff.r = startOff.r,
+              #startNeg = startNeg,
+              startPi = startPi,
+              updateOff.p = TRUE)
+
+plot(r_2)
+print(r_2)
+mcmc= convertToCoda(r_2)
+effectiveSize (mcmc)
+```
+
+### Look at the results from Case 1
+
+```{r}
+
+# Paramètres de la distribution
+shape <- 2.39     # ou k
+scale <- 0.00808  # ou θ
+
+# Séquence de valeurs sur l’axe des x
+x <- seq(0, 0.1, length.out = 20)
+
+# Densité gamma
+y_density <- dgamma(x, shape = shape, scale = scale)
+
+# Largeur de chaque intervalle (tous les x sont espacés régulièrement)
+dx <- x[2] - x[1]
+
+# Conversion densité → probabilité
+y_proba <- y_density * dx
+
+# Vérif : la somme des probabilités ≈ 1
+sum(y_proba)  # Devrait être proche de 1
+
+# Tracer la courbe des probabilités (au lieu de densité)
+plot(x, y_proba, type = "l", lwd = 2, col = "blue",
+     main = paste("Generation Time Distribution (en probabilité)\nshape =", shape, ", scale =", scale),
+     xlab = "Fraction of years", ylab = "Probability")
+
+# Ajouter les lignes verticales en pointillé
+abline(v = 7/365,  col = "red", lty = 2, lwd = 2)
+abline(v = 15/365, col = "darkgreen", lty = 2, lwd = 2)
+abline(v = 30/365, col = "purple", lty = 2, lwd = 2)
+
+# Ajouter une légende
+legend("topright",
+       legend = c("7 days", "15 days", "30 days"),
+       col = c("red", "darkgreen", "purple"),
+       lty = 2, lwd = 2)
+
+```
+
+```{r}
+post_GT <- getGenerationTimeDist(r, maxi = 0.1, numBins = 20)
+post_GT <- as.data.frame(post_GT)
+
+library(ggplot2)
+
+# ---- 1. Distribution gamma théorique ----
+shape <- 2.39
+scale <- 0.00808
+
+x_gamma <- seq(0, 0.1, length.out = 20)
+dx <- x_gamma[2] - x_gamma[1]
+y_density <- dgamma(x_gamma, shape = shape, scale = scale)
+y_proba <- y_density * dx
+
+gamma_df <- data.frame(Time = x_gamma, Proba = y_proba, Source = "Prior distribution")
+
+# ---- 2. Posterior distribution (ton dataframe) ----
+post_GT$Source <- "Posterior distribution"
+
+# ---- 3. Combine both ----
+combined_df <- rbind(post_GT, gamma_df)
+
+# ---- 4. Plot with color legend ----
+ggplot() +
+  geom_bar(data = subset(combined_df, Source == "Posterior distribution"),
+           aes(x = Time, y = Proba, fill = Source),
+           stat = "identity", alpha = 0.6) +
+  
+  geom_line(data = subset(combined_df, Source == "Prior distribution"),
+            aes(x = Time, y = Proba, color = Source),
+            size = 1.2) +
+
+  scale_fill_manual(values = c("Posterior distribution" = "steelblue")) +
+  scale_color_manual(values = c("Prior distribution" = "darkred")) +
+
+  labs(x = "Time (fraction of year)", y = "Probability", 
+       title = "Posterior vs Prior Generation Time Distribution",
+       fill = "", color = "") +
+  theme_minimal() +
+  theme(legend.position = "top")
+
+
+```
+
+```{r}
+post_GT <- getSamplingTimeDist(r, maxi = 0.1, numBins = 20)
+post_GT <- as.data.frame(post_GT)
+
+library(ggplot2)
+
+# ---- 1. Distribution gamma théorique ----
+shape <- 2.39
+scale <- 0.00808
+
+x_gamma <- seq(0, 0.1, length.out = 20)
+dx <- x_gamma[2] - x_gamma[1]
+y_density <- dgamma(x_gamma, shape = shape, scale = scale)
+y_proba <- y_density * dx
+
+gamma_df <- data.frame(Time = x_gamma, Proba = y_proba, Source = "Prior distribution")
+
+# ---- 2. Posterior distribution (ton dataframe) ----
+post_GT$Source <- "Posterior distribution"
+
+# ---- 3. Combine both ----
+combined_df <- rbind(post_GT, gamma_df)
+
+# ---- 4. Plot with color legend ----
+ggplot() +
+  geom_bar(data = subset(combined_df, Source == "Posterior distribution"),
+           aes(x = Time, y = Proba, fill = Source),
+           stat = "identity", alpha = 0.6) +
+  
+  geom_line(data = subset(combined_df, Source == "Prior distribution"),
+            aes(x = Time, y = Proba, color = Source),
+            size = 1.2) +
+
+  scale_fill_manual(values = c("Posterior distribution" = "steelblue")) +
+  scale_color_manual(values = c("Prior distribution" = "darkred")) +
+
+  labs(x = "Time (fraction of year)", y = "Probability", 
+       title = "Posterior vs Prior Sampling Time Distribution",
+       fill = "", color = "") +
+  theme_minimal() +
+  theme(legend.position = "top")
+```
+
+The result of the prior and posterior are the same, so I will try to modify radically the parameters, and see if there are any changes.
+
+```{r}
+library(TransPhylo)
+post_GT <- getGenerationTimeDist(r_2, maxi = 0.1, numBins = 20)
+post_GT <- as.data.frame(post_GT)
+
+library(ggplot2)
+
+# ---- 1. Distribution gamma théorique ----
+#  Household Generation time distribution
+w.shape = 2.39
+w.scale = 0.00808
+shape <- w.shape
+scale <- ws.scale *1.5
+
+x_gamma <- seq(0, 0.1, length.out = 20)
+dx <- x_gamma[2] - x_gamma[1]
+y_density <- dgamma(x_gamma, shape = w.shape, scale = w.scale)
+y_proba <- y_density * dx
+
+gamma_df <- data.frame(Time = x_gamma, Proba = y_proba, Source = "Prior distribution")
+
+# ---- 2. Posterior distribution (ton dataframe) ----
+post_GT$Source <- "Posterior distribution"
+
+# ---- 3. Combine both ----
+combined_df <- rbind(post_GT, gamma_df)
+
+# ---- 4. Plot with color legend ----
+ggplot() +
+  geom_bar(data = subset(combined_df, Source == "Posterior distribution"),
+           aes(x = Time, y = Proba, fill = Source),
+           stat = "identity", alpha = 0.6) +
+  
+  geom_line(data = subset(combined_df, Source == "Prior distribution"),
+            aes(x = Time, y = Proba, color = Source),
+            size = 1.2) +
+
+  scale_fill_manual(values = c("Posterior distribution" = "steelblue")) +
+  scale_color_manual(values = c("Prior distribution" = "darkred")) +
+
+  labs(x = "Time (fraction of year)", y = "Probability", 
+       title = "Posterior vs Prior Generation Time Distribution",
+       fill = "", color = "") +
+  theme_minimal() +
+  theme(legend.position = "top")
+```

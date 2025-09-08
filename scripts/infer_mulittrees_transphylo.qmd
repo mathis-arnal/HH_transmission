@@ -1,0 +1,181 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+# INFER MUTLI TTREES TRANSPHYLO
+
+```{r}
+library(ape)
+library(dplyr)
+library(stringr)
+library(ggtree)
+library(ggplot2)
+library(TransPhylo)
+
+source("analysis_fcts.R")
+
+verdi_df <- read.csv("../datasets/verdi_seq_df.csv")
+library(readr)
+date_df <- read_csv("../analysis/IQtree_LSD/data/no_outliers_treetime_verdiGISAIDref_df.csv")
+
+```
+
+# Create the clusters
+
+```{r}
+threshold <- 60/365
+tree_path <- "../analysis/IQtree_LSD/verdiGISAID/treetime/molecular_clock_analysis/tt_stddev_0.0005/timetree.nexus"
+
+phylo_df <- verdi_df %>% dplyr::filter(used_in_phylogeny == "YES")
+pruned_tree <- read_and_prune_tree(tree_path, phylo_df$sampleid, type ="Nexus")
+  
+patristic_distances <- cophenetic.phylo(pruned_tree)
+hc <- hclust(as.dist(patristic_distances), method = "average")
+clusters <- cutree(hc, h = threshold)
+df_clusters <- data.frame(sampleid = names(clusters), cluster = clusters)
+
+
+```
+
+# Function to create the subtrees
+
+```{r}
+# Create subtrees for each cluster
+create_cluster_subtrees <- function(tree, df_clusters, min_cluster_size = 2) {
+  
+  # Get unique clusters
+  unique_clusters <- unique(df_clusters$cluster)
+  
+  # Initialize list to store subtrees
+  subtrees <- list()
+  cluster_info <- list()
+  
+  for (i in unique_clusters) {
+    
+    # Get samples in this cluster
+    cluster_samples <- df_clusters$sampleid[df_clusters$cluster == i]
+    
+    # Skip clusters that are too small (optional)
+    if (length(cluster_samples) < min_cluster_size) {
+      cat("Skipping cluster", i, "- only", length(cluster_samples), "samples\n")
+      next
+    }
+    
+    # Check which samples are actually in the tree
+    samples_in_tree <- cluster_samples[cluster_samples %in% tree$tip.label]
+    
+    if (length(samples_in_tree) == 0) {
+      cat("Warning: No samples from cluster", i, "found in tree\n")
+      next
+    }
+    
+    # Create subtree by keeping only these samples
+    tryCatch({
+      subtree <- keep.tip(tree, samples_in_tree)
+      
+      # Store the subtree
+      subtrees[[paste0("cluster_", i)]] <- subtree
+      
+      # Store cluster information
+      cluster_info[[paste0("cluster_", i)]] <- list(
+        cluster_id = i,
+        n_samples = length(samples_in_tree),
+        samples = samples_in_tree
+      )
+      
+      cat("Created subtree for cluster", i, "with", length(samples_in_tree), "samples\n")
+      
+    }, error = function(e) {
+      cat("Error creating subtree for cluster", i, ":", e$message, "\n")
+    })
+  }
+  
+  return(list(subtrees = subtrees, cluster_info = cluster_info))
+}
+
+
+
+# Convert them to ptree
+# Convert subtrees to ptree objects for TransPhylo
+convert_to_ptrees <- function(subtrees, date_df, dateLastSample) {
+  
+  ptrees <- list()
+  
+  for (cluster_name in names(subtrees)) {
+    
+    subtree <- subtrees[[cluster_name]]
+    
+    # Get the latest sampling date for this cluster
+    cluster_samples <- subtree$tip.label
+    cluster_dates <- date_df$date[date_df$name %in% cluster_samples]
+    
+    # Calculate dateLastSample for this cluster
+    cluster_dateLastSample <- max(cluster_dates, na.rm = TRUE)
+    
+    tryCatch({
+      # Convert to ptree
+      ptree <- ptreeFromPhylo(subtree, dateLastSample = cluster_dateLastSample)
+      
+      ptrees[[cluster_name]] <- ptree
+      
+      cat("Converted", cluster_name, "to ptree (dateLastSample:", cluster_dateLastSample, ")\n")
+      
+    }, error = function(e) {
+      cat("Error converting", cluster_name, "to ptree:", e$message, "\n")
+    })
+  }
+  
+  return(ptrees)
+}
+```
+
+```{r}
+result <- create_cluster_subtrees(pruned_tree, df_clusters, min_cluster_size = 2)
+
+subtrees <- result$subtrees
+ptrees <- convert_to_ptrees(subtrees, date_df, dateLastSample = 2024.34)
+```
+
+## Transphylo
+
+```{r}
+#  Household Generation time distribution
+w.shape = 2.39
+w.scale = 0.00808
+# We consider the Sampling time distribution
+ws.shape =  5 
+ws.scale = 0.00274
+
+results <- infer_multittree_share_param(
+  ptree_lst = ptrees,
+  w.shape = w.shape,
+  w.scale = w.scale,
+  ws.shape = ws.shape,
+  ws.scale = ws.scale,
+  mcmcIterations=1e4,
+  thinning=10,
+  dateT = 2025,
+  updateOff.p = TRUE)
+  
+```
+
+infer_multittree_share_param is not working
+
+```{r}
+p <- ptrees[[1]]
+
+r <- inferTTree(
+  p,
+  w.shape = w.shape,
+  w.scale = w.scale,
+  ws.shape = ws.shape,
+  ws.scale = ws.scale,
+  mcmcIterations=1e4,
+  thinning=10,
+  dateT = 2025,
+  updateOff.p = TRUE)
+```
+
+Crashes my computer, so not working ....

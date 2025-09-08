@@ -1,0 +1,444 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-05-23"
+---
+
+```{r}
+library('devtools')
+# ggplot version needs to be 3.4.4
+#install_version("ggplot2", version = "3.4.4", repos = "http://cran.us.r-project.org")
+
+library(dplyr)
+library(readr)
+library(stringr)
+library(lubridate)
+```
+
+
+It seems like out of all the  bad sequences, they are all from mahidol.
+I will take my sequences, and filter the 10 to get the final 122.
+```{r}
+
+sequence_data <- read_csv("verdi_df.csv")
+mathis_sequences <- read.FASTA("../../consensus_assembly/combined_consensus.fasta")
+#
+
+
+final_df <- data.frame(sampleid = names(mathis_sequences),
+                       lab_seq = ifelse(grepl("run1_sup$", names(mathis_sequences)),"MU", "CMU"))
+
+# We update the dates 
+name_mapping <- c(
+  "ht09301_240503_d1" = "ht09301_240115_d1",
+  "ht09601_240115_d1" = "ht09601_240503_d1",
+  "ht06602_230604_inf_run1_sup" = "ht06602_230609_inf_run1_sup"
+)
+final_df$sampleid <- ifelse(
+  final_df$sampleid %in% names(name_mapping),
+  name_mapping[final_df$sampleid],
+  final_df$sampleid)
+
+
+mahidol_seq <- final_df$sampleid[grepl("run1_sup$", final_df$sampleid)]
+mahidol_seq <- sub("_run1_sup$", "", mahidol_seq)
+sequence_data <- sequence_data %>% 
+              rename(sampleid = seq_id) %>% 
+              mutate(lab_seq = ifelse(sampleid %in% mahidol_seq, "MU", "CMU"),
+                     sampleid = if_else(lab_seq == "MU", paste0(sampleid, "_run1_sup"), sampleid))
+
+final_df <- final_df %>% 
+          mutate(used_in_phylogeny = ifelse(sampleid %in% sequence_data$sampleid, "YES", "NO"))
+
+
+rm(sequence_data)
+
+# Bad coverage (58 %)
+final_df[final_df$sampleid == "ht01001_220831_d1",]$used_in_phylogeny <- "NO"
+
+# Extract the hhid, pid and index
+final_df <- final_df %>%
+  mutate(
+    pid = toupper(str_sub(sampleid, 1, 7)),
+    hhid = str_extract(sampleid, "(?<=ht)\\d+") %>% substr(1, 3),
+    index = ifelse(str_extract(sampleid, "(?<=ht)\\d+") %>% substr(5,5)=="1", 1,0))
+
+
+treetime_data <- final_df %>% 
+  mutate(
+    # Extraire la date
+    date_str = str_extract(sampleid, "\\d{6}"),
+    # Convertir la date en format Date
+    date = as.Date(date_str, format = "%y%m%d")) %>% 
+  rename(name = sampleid) %>% 
+  select(name, date)
+
+ref_data <- data.frame(name = "MN908947.3", date = as.Date("2019-12-26"))
+treetime_data <- rbind(treetime_data, ref_data)
+
+# Write the treetime data 
+write.csv(treetime_data, "treetime_data.csv", quote = FALSE)
+rm(treetime_data)
+
+write.csv(final_df, "final_seq_df.csv")
+
+```
+
+
+# Sequence removal( We comment the code that is outdated)
+```{r}
+
+mathis_sequences <- read.FASTA("D:/VERDI/Mathis/132_sample/combined_consensus.fasta")
+
+# Bad coverage (58 %)
+sequence_to_remove <- c("ht01001_220831_d1")
+# RNA test negative
+sequence_to_remove <- c(sequence_to_remove,"ht07401_230705_d1")
+# Duplicates of sequences between d1 and infect, we keep the infect
+sequence_to_remove <- c(sequence_to_remove, "ht00306_220805_d1", "ht01402_220913_d1",
+                        "ht02002_220929_d1", "ht08002_230922_d1", "ht08903_231217_d1" )
+
+# Get rid of the CMU duplicates in the sequences
+sequence_to_remove <- c(sequence_to_remove, "ht00301_220805_d1", "ht00302_220810_inf",
+                        "ht06301_230510_d1", "ht07002_230623_inf")
+
+
+# Remove all the undesired sequences
+filtered_sequences <- mathis_sequences[!(names(mathis_sequences) %in% sequence_to_remove)]
+
+# Update the date of the samples
+name_mapping <- c(
+  "ht09301_240503_d1" = "ht09301_240115_d1",
+  "ht09601_240115_d1" = "ht09601_240503_d1",
+  "ht06602_230604_inf_run1_sup" = "ht06602_230609_inf_run1_sup"
+)
+names(filtered_sequences) <- ifelse(
+  names(filtered_sequences) %in% names(name_mapping),
+  name_mapping[names(filtered_sequences)],
+  names(filtered_sequences)
+)
+# Add the reference data
+
+# write.FASTA(filtered_sequences, file = "D:/VERDI/Mathis/final_seq/final_seq.fasta")
+write.FASTA(filtered_sequences, file = "D:/VERDI/Mathis/final_seq/final_seq.fasta")
+
+```
+
+```{bash}
+cd /mnt/d/VERDI/Mathis/final_seq
+#mafft --auto final_seq.fasta > aligned_final_seq.fasta
+mafft --auto --addfragments final_seq.fasta ../ref/MN908947.3.fasta > aligned_final_seq.fasta
+```
+
+# Mask Positions (https://virological.org/t/issues-with-sars-cov-2-sequencing-data/473)
+```{r}
+library(seqinr)
+final_seq <- read.fasta("D:/VERDI/Mathis/final_seq/aligned_final_seq.fasta", as.string = FALSE, seqtype = "DNA")
+
+# Define homoplasic positions to mask
+homoplasic_positions <- c(187, 1059, 2094, 3037, 3130, 6990, 8022, 10323, 10741, 11074, 13408, 14786, 19684, 20148, 21137, 24034, 24378, 25563, 26144, 26461, 26681, 28077, 28826, 28854, 29700)
+
+mask_extremities_and_homoplasies <- function(seq,
+                                             start1 = 1, end1 = 55,
+                                             start2 = 29804, end2 = 29903,
+                                             homoplasic_positions = NULL) {
+  seq <- as.character(seq)
+  
+  # Masquer extrémités
+  seq[start1:end1] <- "n"
+  seq[start2:end2] <- "n"
+  
+  # Masquer positions homoplasiques si elles existent dans la séquence
+  valid_pos <- homoplasic_positions[homoplasic_positions <= length(seq)]
+  seq[valid_pos] <- "n"
+  
+  return(seq)
+}
+
+
+# Mask HOMOPLASIC SITES 
+
+
+# Apply masking
+masked_alignment <- lapply(
+  final_seq,
+  mask_extremities_and_homoplasies,
+  homoplasic_positions = homoplasic_positions
+)
+
+write.fasta(
+  sequences = masked_alignment,
+  names = names(final_seq),
+  file.out = "D:/VERDI/Mathis/final_seq/masked_aligned_final_seq.fasta"
+)
+
+```
+
+
+
+```{r}
+library(ape)
+library(ggtree)
+library(dplyr)
+#library(ggplot2)
+phy <- read.nexus("D:/VERDI/Mathis/final_seq/treetime/timetree.nexus")
+
+#phy$tip.label <- sub("_run1_sup$", "", mahidol_seq)
+
+
+
+# Calculate the patristic distance matrix
+patristic_distances <- cophenetic.phylo(phy)
+# Extraire les distances uniques de la matrice
+distances <- patristic_distances[upper.tri(patristic_distances)]
+# Résumé statistique des distances
+summary(distances)
+# Visualiser la distribution des distances
+hist(distances, breaks = 30, col = "lightblue", main = "Patristic Distance Distribution (122 samples)")
+
+
+# --------- CLUSTERING -----------
+# Appliquer le clustering hiérarchique
+hc <- hclust(as.dist(patristic_distances), method = "average")
+
+# Définir les valeurs de cutoff
+cutoffs <- seq(0.1, 2, by=0.1)
+
+# Initialiser un vecteur pour stocker le nombre de clusters
+num_clusters <- numeric(length(cutoffs))
+
+# Boucle sur les valeurs de cutoff
+for (i in 1:length(cutoffs)) {
+  cutoff <- cutoffs[i]
+  clusters <- cutree(hc, h=cutoff)
+  num_clusters[i] <- length(unique(clusters))
+}
+
+# Créer le diagramme de coude
+plot(cutoffs, num_clusters, type="b", pch=19, xlab="Cutoff", ylab="Number of clusters", main=" Patristic Distance Elbow Diagran")
+```
+# Number of hh transmission and  number households where it occured
+
+```{r}
+# Définir les valeurs de cutoff
+cutoffs <- seq(0.1, 2, by=0.1)
+
+# Initialiser un vecteur pour stocker le nombre de clusters, de hhid et des personnes infectees
+num_clusters <- numeric(length(cutoffs))
+num_hhtrans_mem <- numeric(length(cutoffs))
+num_hhid <- numeric(length(cutoffs))
+# Create the data for the plot
+df_clusters <- data.frame(sampleid = names(clusters), cluster = clusters)
+
+# Perform all operations in a single pipeline
+annotation_data <- final_df %>%
+  select(sampleid, hhid, index) %>%
+  mutate(hhid = as.factor(hhid),
+         index = as.factor(index)) %>%
+  left_join(df_clusters, by = "sampleid") #%>%
+  group_by(hhid, cluster) %>%
+  mutate(hh_infected = ifelse(any(index == 1) & any(index == 0), TRUE, FALSE)) %>%
+  ungroup() %>%
+  filter(hh_infected == TRUE) %>%
+  select(sampleid, hhid, index)
+
+
+# Boucle sur les valeurs de cutoff
+for (i in 1:length(cutoffs)) {
+  cutoff <- cutoffs[i]
+  clusters <- cutree(hc, h=cutoff)
+  df_clusters <- data.frame(sampleid = names(clusters), cluster = clusters)
+  # Get the data we want
+  annotation_data <- final_df %>%
+    select(sampleid, hhid, index) %>%
+    mutate(hhid = as.factor(hhid),
+           index = as.factor(index)) %>%
+    left_join(df_clusters, by = "sampleid") %>%
+    group_by(hhid, cluster) %>%
+    mutate(hh_infected = ifelse(any(index == 1) & any(index == 0), TRUE, FALSE)) %>%
+    ungroup() %>%
+    filter(hh_infected == TRUE) %>%
+    select(sampleid, hhid, index)
+  # Get the data
+  num_clusters[i] <- length(unique(clusters))
+  num_hhid[i] <- length(unique(annotation_data$hhid))
+  num_hhtrans_mem[i] <- sum(annotation_data$index==0)
+  # 
+}
+
+plot_data <- data.frame(
+  cutoffs = cutoffs,
+  num_clusters = num_clusters,
+  num_hhid = num_hhid,
+  num_hhtrans_mem = num_hhtrans_mem
+)
+
+# Melt the dataframe to long format for ggplot2
+library(reshape2)
+melted_data <- melt(plot_data, id.vars = "cutoffs", variable.name = "metric", value.name = "value")
+
+# Create the plot
+ggplot(melted_data, aes(x = cutoffs, y = value, color = metric)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Plot of num_clusters, num_hhid, and num_hhtrans_mem based on cutoffs",
+       x = "Cutoffs",
+       y = "Value",
+       color = "Metric")
+```
+
+```{r}
+# Définir un seuil de distance
+seuil_distance <- 0.5  # Remplacez par votre seuil choisi
+
+# Couper l'arbre de clustering à la hauteur du seuil
+clusters <- cutree(hc, h = seuil_distance)
+
+# Afficher les clusters
+nb_clusters <- as.numeric(length(unique(clusters)))
+
+
+# Create the data for the plot
+df_clusters <- data.frame(sampleid = names(clusters), cluster = clusters)
+
+# Assuming final_df and df_clusters are already defined dataframes
+hhtransmission_df <- final_df %>%
+  mutate(hhid = as.factor(hhid),
+         index = as.factor(index)) %>%
+  # Left join with df_clusters
+  left_join(df_clusters, by = "sampleid")
+
+# We take off the NA values in cluster (We didn"t include this sequences in the phylogeny)
+hhtransmission_df <- hhtransmission_df[!is.na(hhtransmission_df$cluster), ]
+hhtransmission_df<- hhtransmission_df%>%
+  # Group by hhid and cluster, then determine if hh_infected
+  group_by(hhid, cluster) %>%
+  mutate(hh_infected = ifelse(is.na(cluster), NA, any(index == 1) & any(index == 0))) %>%
+  ungroup() %>% 
+  mutate(phy_hhtrans_mem = ifelse(index == 0 & hh_infected, TRUE, FALSE))
+
+
+low_cutoff_hhtransmission_df <- data.frame(pid = hhtransmission_df$pid,
+                                          low_cutoff_hhtransmission = hhtransmission_df$phy_hhtrans_mem,
+                                          low_cutoff_hhtransmission_houselevel = hhtransmission_df$hh_infected)
+
+# Préparer les données : ne garder que les points avec hh_infected == TRUE
+annotation_data <- hhtransmission_df %>%
+  filter(hh_infected == TRUE) %>%
+  select(sampleid, hhid, index)
+
+# Vérifier que sampleid correspond aux labels de l’arbre
+# print(head(phy$tip.label))
+# print(head(annotation_data$sampleid))
+
+# Créer le plot
+p <- ggtree(phy) %<+% annotation_data +  # jointure sur sampleid
+  geom_tippoint(aes(color = as.factor(hhid), 
+                    shape = as.factor(index)), 
+                size = 3, na.rm = TRUE) +  # na.rm=TRUE pour cacher les points non infectés
+  scale_shape_manual(values = c("0" = 16, "1" = 8),na.translate = FALSE) +  # rond = 16, étoile = 8
+  scale_color_discrete(name = "HOUSEHOLD INDEX", na.translate = FALSE) +  # Supprimer NA dans la légende des couleurs
+  theme_tree2() +
+  guides(col = guide_legend(nrow = 8)) +
+  ggtitle(paste("IQ TREE + LSD PHYLOGENY (122 samples, cutoff", seuil_distance,"," ,nb_clusters,"clusters )"))
+
+print(p)
+print(paste("Pour un cutoff de ",seuil_distance, " il y a ", nb_clusters, "clusters"))
+```
+
+# High Cluster
+
+```{r}
+library(ggplot2)
+# Définir un seuil de distance
+seuil_distance <- 1  # Remplacez par votre seuil choisi
+
+# Couper l'arbre de clustering à la hauteur du seuil
+clusters <- cutree(hc, h = seuil_distance)
+
+# Afficher les clusters
+nb_clusters <- as.numeric(length(unique(clusters)))
+
+
+# Create the data for the plot
+df_clusters <- data.frame(sampleid = names(clusters), cluster = clusters)
+
+# Assuming final_df and df_clusters are already defined dataframes
+hhtransmission_df <- final_df %>%
+  mutate(hhid = as.factor(hhid),
+         index = as.factor(index)) %>%
+  # Left join with df_clusters
+  left_join(df_clusters, by = "sampleid") 
+
+hhtransmission_df <- hhtransmission_df[!is.na(hhtransmission_df$cluster), ]
+
+hhtransmission_df <- hhtransmission_df%>%
+  # Group by hhid and cluster, then determine if hh_infected
+  group_by(hhid, cluster) %>%
+  mutate(hh_infected = ifelse(is.na(cluster), NA, any(index == 1) & any(index == 0))) %>%
+  ungroup() %>% 
+  # Get if it as a household transmission
+  mutate(phy_hhtrans_mem = ifelse(index == 0 & hh_infected, TRUE, FALSE))
+
+high_cutoff_hhtransmission_df <- data.frame(pid = hhtransmission_df$pid,
+                                            high_cutoff_hhtransmission = hhtransmission_df$phy_hhtrans_mem,
+                                            high_cutoff_hhtransmission_houselevel=hhtransmission_df$hh_infected)
+
+
+# Préparer les données : ne garder que les points avec hh_infected == TRUE
+annotation_data <- hhtransmission_df %>%
+  filter(hh_infected == TRUE) %>%
+  select(sampleid, hhid, index)
+
+# Vérifier que sampleid correspond aux labels de l’arbre
+# print(head(phy$tip.label))
+# print(head(annotation_data$sampleid))
+
+# Créer le plot
+p <- ggtree(phy) %<+% annotation_data +  # jointure sur sampleid
+  geom_tippoint(aes(color = as.factor(hhid), 
+                    shape = as.factor(index)), 
+                size = 3, na.rm = TRUE) +  # na.rm=TRUE pour cacher les points non infectés
+  scale_shape_manual(values = c("0" = 16, "1" = 8),na.translate = FALSE) +  # rond = 16, étoile = 8
+  scale_color_discrete(name = "HOUSEHOLD INDEX", na.translate = FALSE) +  # Supprimer NA dans la légende des couleurs
+  theme_tree2() +
+  guides(col = guide_legend(nrow = 8)) +
+  ggtitle(paste("IQ TREE + LSD PHYLOGENY (122 samples, cutoff", seuil_distance,"," ,nb_clusters,"clusters )"))
+
+print(p)
+print(paste("Pour un cutoff de ",seuil_distance, " il y a ", nb_clusters, "clusters"))
+```
+
+
+
+# Data prep
+
+
+
+FINIR DE MERGE LES 3 
+```{r}
+cutoff_df <- merge(low_cutoff_hhtransmission_df, high_cutoff_hhtransmission_df, by="pid")
+
+VERDI_dataset <- read_excel("VERDI_dataset_250522_endformatted.xlsx")
+
+phy_verdi_df <- left_join(VERDI_dataset, cutoff_df, by = "pid")
+
+phy_verdi_df <- phy_verdi_df %>% 
+  select(pid, hhid, index, sampleid, sampleid2, hhtrans_mem, low_cutoff_hhtransmission, high_cutoff_hhtransmission)
+```
+
+Flook had the same result as with high_cutoff_transmission, with the same 37 HH transmission.
+
+With low_cutoff_hhtransmission we have 35 HH transmission, HT04505 and HT05302 are not considerered hh transmission.
+
+
+Let's have a look at the value of HT04505 and HT05302 relative to their index.
+```{r}
+patristic_distances
+ht04505_distance <- patristic_distances["ht04505_221210_inf_run1_sup", "ht04501_221128_d1_run1_sup"]
+ht05302_distance <- patristic_distances["ht05302_221224_inf", "ht05301_221224_d1"]
+```
+
+Indeed, they have values (0.71 amd 0.82) under the low cutoff (0.5) and under the high cutoff (1), hence they are not in the same 
+
+We can plot them on the tree to see if they seem close or not.

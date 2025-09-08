@@ -1,0 +1,12 @@
+---
+title: "BEAST Workflow"
+output: html_document
+date: "2025-06-09"
+---
+
+
+The workflow has been mainly run on a cluster on the using slurm job shell script. 
+The sample data has been creating using the Markdown "setup_analysis".
+We follow the beast tutorial on sars cov2 (https://beast.community/workshop_respiratory_virus_phylodynamics).
+These scripts are available in the scripts folder
+

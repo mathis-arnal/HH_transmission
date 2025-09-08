@@ -1,0 +1,130 @@
+---
+title: "ena submission"
+format: html
+editor: visual
+---
+
+## ENA SUBMISSION
+
+We need to create the sample metadata spreadsheet to use tu register the samples
+
+```{r}
+library(dplyr)
+getwd()
+sample_metadata <-read.table("D:/VERDI/FINAL_DATA/sequence_analysis/ena_submission/samples_metadata.tsv", 
+                             sep = "\t", 
+                             header = TRUE,
+                             check.names = FALSE)
+colnames(sample_metadata)
+# remove the duplicates
+sample_metadata <- sample_metadata[, !duplicated(colnames(sample_metadata))]
+
+
+colnames(sample_metadata)
+
+# Enter the TAX ID of SARS COV 2  
+sample_metadata$tax_id <- "2697049"
+
+sample_metadata$scientific_name <- "Severe acute respiratory syndrome coronavirus 2"
+sample_metadata$host.common.name <- "Human"
+sample_metadata$host.scientific.name <- "Homo sapiens"
+sample_metadata$collecting.institution <- "Chiang Mai University"
+
+```
+
+# Our metadata
+
+```{r}
+library(readxl)
+date_df <- read.csv("../datasets/treetime_data.csv") %>% 
+  rename(sample_date = date)
+flook_trans <- read_excel("D:/VERDI/FINAL_DATA/metadata/res/VERDI_dataset_250522_endformatted (1).xlsx")
+
+flook_trans <- dplyr::left_join(flook_trans, date_df, by = c('sampleid' = 'name'))
+#colnames(flook_trans)
+flook_trans <- flook_trans %>% 
+  select(pid,sampleid,sample_date,sex,age) %>% 
+  rename(`host subject id` = pid,
+         sample_alias = sampleid,
+         `collection date` = sample_date,
+         `host age` = age,
+         `host sex` = sex) %>% 
+  mutate(
+    tax_id = "2697049",
+    sample_title = sample_alias,
+    sample_description = "Original sequences from nasopharyingeal swab",
+    scientific_name = "Severe acute respiratory syndrome coronavirus 2",
+    `host common name` = "Human",
+    `host scientific name` = "Homo sapiens",
+    `collecting institution` = "Chiang Mai University",
+    `geographic location (country and/or sea)` = "Thailand",
+    `geographic location (region and locality)` = "Chiang Mai",
+    `geographic location (longitude)` = 98.979263,
+    `geographic location (latitude)` = 18.796143,
+    isolate = "not provided",
+    `collector name` = "Name",
+    `host health state` = "Healthy"
+  ) %>% 
+  filter(!is.na(`collection date`))
+
+```
+
+The data is not finished, but I can tree to submit it to ENA to see
+
+```{r}
+write.table(flook_trans,
+            file = "../datasets/ena_sample_metadata.tsv",
+            sep = "\t",         # tab separator
+            row.names = FALSE,  # don't write row numbers
+            quote = FALSE)      # don't put quotes around text)
+```
+
+# READ SUBMISSION
+
+```{r}
+sample_accession_number <- ''
+study_accession_number <- "PRJEB96001"
+fastq_template <-read.table("D:/VERDI/FINAL_DATA/sequence_analysis/ena_submission/fastq_template.tsv", 
+                             sep = "\t", 
+                             header = TRUE,
+                             check.names = FALSE)
+colnames(fastq_template)
+
+verdi_df <- read.csv("../datasets/verdi_seq_df.csv")
+sequence_id <- verdi_df %>%
+  select(sampleid) %>% 
+  rename(sample_alias = sampleid) %>% 
+  mutate(study = study_accession_number,
+         instrument_model = "MinION",
+         library_name = "ARTIC v5.3.2",
+         library_source = "VIRAL RNA",
+         library_selection = "RT-PCR",
+         library_strategy = "AMPLICON",
+         library_layout = "SINGLE",
+         file_name = paste0(sample_alias,".fastq.gz"))
+
+```
+
+```{r}
+
+verdi_df <- read.csv("../datasets/verdi_seq_df.csv")
+sequence_id <- verdi_df %>% 
+  filter(used_in_phylogeny == "YES") %>% 
+  pull(sampleid)
+
+pango_lineages <- read.csv("../analysis/IQtree_LSD/verdiGISAID/lineage_report.csv")
+pango_lineages <- pango_lineages %>% 
+  select(taxon, scorpio_call) %>% 
+  rename(lineage = scorpio_call,
+         sampleid = taxon ) %>% 
+  filter(sampleid %in% sequence_id) %>% 
+  dplyr::left_join(verdi_df, by = "sampleid") %>% 
+  select(pid, lineage)
+
+write.csv(pango_lineages,
+          "../datasets/verdi_seq_lineages.csv",
+          row.names = FALSE)
+
+
+
+```
